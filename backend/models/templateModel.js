@@ -1,0 +1,296 @@
+// models/templateModel.js
+const { pool } = require('../config/database');
+const { v4: uuidv4 } = require('uuid');
+
+class Template {
+    // Create a new template
+    static async create(templateData, userId) {
+        const connection = await pool.getConnection();
+        try {
+            await connection.beginTransaction();
+
+            const templateId = uuidv4();
+            const {
+                name,
+                category,
+                language,
+                headerType,
+                headerContent,
+                bodyText,
+                footerText,
+                buttons = [],
+                status = 'pending'
+            } = templateData;
+
+            // Insert template
+            await connection.execute(
+                `INSERT INTO templates (
+                id, name, category, language, header_type, header_content, 
+                body_text, footer_text, status, user_id, variables
+              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, [
+                    templateId, name, category, language, headerType, headerContent,
+                    bodyText, footerText, status, userId, templateData.variables
+                ]
+            );
+
+            // Insert buttons if any
+            if (buttons && buttons.length > 0) {
+                for (let i = 0; i < buttons.length; i++) {
+                    const button = buttons[i];
+                    await connection.execute(
+                        `INSERT INTO template_buttons (
+              id, template_id, type, text, value, button_order
+            ) VALUES (?, ?, ?, ?, ?, ?)`, [uuidv4(), templateId, button.type, button.text, button.value, i]
+                    );
+                }
+            }
+
+            await connection.commit();
+            return { id: templateId, ...templateData };
+        } catch (error) {
+            await connection.rollback();
+            throw error;
+        } finally {
+            connection.release();
+        }
+    }
+
+    // Get template by ID
+    static async getById(templateId, userId) {
+        const [templates] = await pool.execute(
+            `SELECT * FROM templates WHERE id = ? AND user_id = ?`, [templateId, userId]
+        );
+
+        if (templates.length === 0) {
+            return null;
+        }
+
+        const template = templates[0];
+
+        // Parse variables JSON if exists
+        let variables = {};
+        try {
+            variables = template.variables ? JSON.parse(template.variables) : {};
+        } catch (e) {
+            console.error('Error parsing variables:', e);
+        }
+
+        // Get buttons
+        const [buttons] = await pool.execute(
+            `SELECT id, type, text, value, button_order 
+       FROM template_buttons 
+       WHERE template_id = ? 
+       ORDER BY button_order ASC`, [templateId]
+        );
+
+        return {
+            ...template,
+            variables,
+            buttons: buttons.map(button => ({
+                id: button.id,
+                type: button.type,
+                text: button.text,
+                value: button.value,
+                order: button.button_order
+            }))
+        };
+    }
+
+    // Get all templates for a user
+    static async getAllByUser(userId, filters = {}) {
+        const queryParams = [userId];
+        let filterQuery = '';
+
+        if (filters.status) {
+            filterQuery = ' AND status = ?';
+            queryParams.push(filters.status);
+        }
+
+        if (filters.category) {
+            filterQuery += ' AND category = ?';
+            queryParams.push(filters.category);
+        }
+
+        const [templates] = await pool.execute(
+            `SELECT * FROM templates WHERE user_id = ?${filterQuery} ORDER BY created_at DESC`,
+            queryParams
+        );
+
+        return templates;
+    }
+
+    // Update a template
+    static async update(templateId, templateData, userId) {
+        const connection = await pool.getConnection();
+        try {
+            await connection.beginTransaction();
+
+            // Check if template exists and belongs to user
+            const [templates] = await connection.execute(
+                'SELECT id FROM templates WHERE id = ? AND user_id = ?', [templateId, userId]
+            );
+
+            if (templates.length === 0) {
+                throw new Error('Template not found or not authorized');
+            }
+
+            const {
+                name,
+                category,
+                language,
+                headerType,
+                headerContent,
+                bodyText,
+                footerText,
+                buttons = [],
+                status
+            } = templateData;
+
+            // Update template
+            await connection.execute(
+                `UPDATE templates SET 
+          name = ?, category = ?, language = ?, header_type = ?, 
+          header_content = ?, body_text = ?, footer_text = ?, 
+          status = ?, updated_at = CURRENT_TIMESTAMP
+         WHERE id = ?`, [
+                    name, category, language, headerType, headerContent,
+                    bodyText, footerText, status, templateId
+                ]
+            );
+
+            // Delete existing buttons
+            await connection.execute(
+                'DELETE FROM template_buttons WHERE template_id = ?', [templateId]
+            );
+
+            // Insert new buttons
+            if (buttons && buttons.length > 0) {
+                for (let i = 0; i < buttons.length; i++) {
+                    const button = buttons[i];
+                    await connection.execute(
+                        `INSERT INTO template_buttons (
+              id, template_id, type, text, value, button_order
+            ) VALUES (?, ?, ?, ?, ?, ?)`, [uuidv4(), templateId, button.type, button.text, button.value, i]
+                    );
+                }
+            }
+
+            await connection.commit();
+            return { id: templateId, ...templateData };
+        } catch (error) {
+            await connection.rollback();
+            throw error;
+        } finally {
+            connection.release();
+        }
+    }
+
+    // Delete a template
+    static async delete(templateId, userId) {
+            const connection = await pool.getConnection();
+            try {
+                await connection.beginTransaction();
+
+                // Check if template exists and belongs to user
+                const [templates] = await connection.execute(
+                    'SELECT id FROM templates WHERE id = ? AND user_id = ?', [templateId, userId]
+                );
+
+                if (templates.length === 0) {
+                    throw new Error('Template not found or not authorized');
+                }
+
+                // Delete buttons first
+                await connection.execute(
+                    'DELETE FROM template_buttons WHERE template_id = ?', [templateId]
+                );
+
+                // Delete template
+                const [result] = await connection.execute(
+                    'DELETE FROM templates WHERE id = ?', [templateId]
+                );
+
+                await connection.commit();
+                return result.affectedRows > 0;
+            } catch (error) {
+                await connection.rollback();
+                throw error;
+            } finally {
+                connection.release();
+            }
+        }
+        // Submit template for approval
+    static async submitForApproval(templateId, userId) {
+        const [result] = await pool.execute(
+            `UPDATE templates SET status = 'pending', updated_at = CURRENT_TIMESTAMP 
+       WHERE id = ? AND user_id = ?`, [templateId, userId]
+        );
+
+        return result.affectedRows > 0;
+    }
+
+    // Save template as draft
+    static async saveAsDraft(templateData, userId) {
+        const templateWithStatus = {
+            ...templateData,
+            status: 'draft'
+        };
+
+        if (templateData.id) {
+            // Update existing draft
+            return await this.update(templateData.id, templateWithStatus, userId);
+        } else {
+            // Create new draft
+            return await this.create(templateWithStatus, userId);
+        }
+    }
+
+    static async updateStatus(templateId, status, additionalData = {}) {
+            const connection = await pool.getConnection();
+            try {
+                await connection.beginTransaction();
+
+                // Ensure all values are defined, replace undefined with null
+                const updateData = {
+                    status,
+                    ...Object.fromEntries(
+                        Object.entries(additionalData).map(([key, value]) => [key, value !== undefined ? value : null])
+                    )
+                };
+
+                const columns = Object.keys(updateData);
+                const values = Object.values(updateData);
+
+                const query = `
+                UPDATE templates 
+                SET ${columns.map(col => `${col} = ?`).join(', ')},
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE id = ?
+            `;
+    
+            await connection.execute(query, [...values, templateId]);
+            await connection.commit();
+            
+            // Return the updated template
+            return await this.getById(templateId, additionalData.user_id || 1);
+        } catch (error) {
+            await connection.rollback();
+            throw error;
+        } finally {
+            connection.release();
+        }
+    }
+      // Add method to get templates that need status update
+      static async getPendingTemplates(userId) {
+        const [templates] = await pool.execute(
+          `SELECT * FROM templates 
+           WHERE user_id = ? AND status = 'pending'
+           ORDER BY created_at DESC`,
+          [userId]
+        );
+        return templates;
+      }
+    
+}
+
+module.exports = Template;

@@ -1,0 +1,213 @@
+/* Base styles */
+:root {
+  --primary-color: #1877F2;      /* Meta blue */
+  --primary-dark: #166FE5;
+  --primary-light: #3b8efc;
+  --accent-color: #25D366;       /* WhatsApp green */
+  --accent-dark: #1da855;
+  --accent-light: #4cdf84;
+  --warning-color: #F5A623;      
+  --error-color: #FF4949;
+  --success-color: #2DCE89;
+  --neutral-900: #1E1E1E;        /* Text and key UI */
+  --neutral-800: #333333;
+  --neutral-700: #4F4F4F;
+  --neutral-600: #636363;
+  --neutral-500: #828282;        /* Secondary text */
+  --neutral-400: #BDBDBD;
+  --neutral-300: #E0E0E0;        /* Borders */
+  --neutral-200: #F2F2F2;        /* Background */
+  --neutral-100: #FCFCFC;
+  --white: #FFFFFF;
+  --sidebar-width: 256px;
+  --sidebar-collapsed-width: 72px;
+  --header-height: 64px;
+  --border-radius-sm: 4px;
+  --border-radius-md: 8px;
+  --border-radius-lg: 12px;
+  --box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+  --transition-speed: 0.3s;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: 'Inter', sans-serif;
+  font-size: 16px;
+  line-height: 1.5;
+  color: var(--neutral-800);
+  background-color: var(--neutral-200);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  color: var(--neutral-900);
+  line-height: 1.2;
+  margin-bottom: 16px;
+}
+
+h1 {
+  font-size: 32px;
+  font-weight: 700;
+}
+
+h2 {
+  font-size: 24px;
+  font-weight: 600;
+}
+
+h3 {
+  font-size: 20px;
+  font-weight: 600;
+}
+
+h4 {
+  font-size: 18px;
+  font-weight: 600;
+}
+
+h5 {
+  font-size: 16px;
+  font-weight: 600;
+}
+
+p {
+  margin-bottom: 16px;
+}
+
+a {
+  color: var(--primary-color);
+  text-decoration: none;
+  transition: color var(--transition-speed);
+}
+
+a:hover {
+  color: var(--primary-dark);
+}
+
+button {
+  font-family: 'Inter', sans-serif;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  border: none;
+  outline: none;
+  transition: all var(--transition-speed);
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px 16px;
+  border-radius: var(--border-radius-md);
+  font-weight: 500;
+  background-color: var(--primary-color);
+  color: var(--white);
+}
+
+.btn:hover {
+  background-color: var(--primary-dark);
+}
+
+.btn-primary {
+  background-color: var(--primary-color);
+  color: var(--white);
+}
+
+.btn-primary:hover {
+  background-color: var(--primary-dark);
+}
+
+.btn-accent {
+  background-color: var(--accent-color);
+  color: var(--white);
+}
+
+.btn-accent:hover {
+  background-color: var(--accent-dark);
+}
+
+.btn-secondary {
+  background-color: var(--white);
+  color: var(--neutral-800);
+  border: 1px solid var(--neutral-300);
+}
+
+.btn-secondary:hover {
+  background-color: var(--neutral-200);
+}
+
+.card {
+  background-color: var(--white);
+  border-radius: var(--border-radius-md);
+  box-shadow: var(--box-shadow);
+  padding: 24px;
+}
+
+input, select, textarea {
+  font-family: 'Inter', sans-serif;
+  font-size: 14px;
+  padding: 10px 12px;
+  border: 1px solid var(--neutral-300);
+  border-radius: var(--border-radius-sm);
+  color: var(--neutral-800);
+  background-color: var(--white);
+  transition: border-color var(--transition-speed);
+  width: 100%;
+}
+
+input:focus, select:focus, textarea:focus {
+  outline: none;
+  border-color: var(--primary-color);
+}
+
+label {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--neutral-700);
+  margin-bottom: 8px;
+  display: block;
+}
+
+/* Utilities */
+.mt-8 { margin-top: 8px; }
+.mt-16 { margin-top: 16px; }
+.mt-24 { margin-top: 24px; }
+.mb-8 { margin-bottom: 8px; }
+.mb-16 { margin-bottom: 16px; }
+.mb-24 { margin-bottom: 24px; }
+
+.container {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 0 24px;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border-width: 0;
+}
+
+/* Responsive breakpoints */
+@media (max-width: 768px) {
+  :root {
+    --sidebar-width: 0;
+  }
+  
+  .sidebar-open {
+    --sidebar-width: 256px;
+  }
+}

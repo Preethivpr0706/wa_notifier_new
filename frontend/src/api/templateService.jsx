@@ -1,0 +1,159 @@
+// src/api/templateService.js
+import axios from 'axios';
+
+const API_URL =  import.meta.env.REACT_APP_API_URL || 'http://localhost:5000/api';
+
+// Create axios instance with authorization header
+const apiClient = axios.create({
+  baseURL: API_URL,
+  headers: {
+    'Content-Type': 'application/json'
+  }
+});
+
+// Add authorization token to requests
+apiClient.interceptors.request.use(
+  (config) => {
+    const token = localStorage.getItem('token');
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
+    return config;
+  },
+  (error) => {
+    return Promise.reject(error);
+  }
+);
+
+// Template API services
+export const templateService = {
+   // Create upload session for media files
+   // In templateService.js
+createUploadSession: async (fileInfo) => {
+  try {
+      console.log('Creating upload session with info:', fileInfo);
+      const response = await apiClient.post('/templates/media/create-session', fileInfo);
+      console.log('Upload session response:', response);
+      
+      // Verify the response structure
+      if (!response?.data?.data?.id) {
+          console.error('Invalid response structure:', response);
+          throw new Error('Invalid response from upload session creation');
+      }
+      
+      return response;
+  } catch (error) {
+      console.error('Upload session creation error:', error.response || error);
+      throw new Error(error.response?.data?.message || 'Failed to create upload session');
+  }
+},
+
+  
+ // api/templateService.js
+uploadFileToSession: async (sessionId, formData, onUploadProgress) => {
+  try {
+      const response = await apiClient.post(
+          `/templates/media/upload/${encodeURIComponent(sessionId)}`, 
+          formData,
+          {
+              headers: {
+                  'Content-Type': 'multipart/form-data',
+              },
+              onUploadProgress
+          }
+      );
+      
+      if (!response.data.success) {
+          throw new Error(response.data.message || 'Upload failed');
+      }
+      
+      return response;
+  } catch (error) {
+      console.error('Upload error:', error.response?.data || error);
+      throw new Error(error.response?.data?.message || 'Failed to upload file');
+  }
+},
+  // Get all templates
+  getTemplates: async (filters = {}) => {
+    try {
+      const queryParams = new URLSearchParams();
+      if (filters.status) queryParams.append('status', filters.status);
+      if (filters.category) queryParams.append('category', filters.category);
+      
+      const response = await apiClient.get(`/templates?${queryParams.toString()}`);
+      return response.data;
+    } catch (error) {
+      throw new Error(error.response?.data?.message || 'Failed to fetch templates');
+    }
+  },
+  
+  // Get template by ID
+  getTemplateById: async (id) => {
+    try {
+      const response = await apiClient.get(`/templates/${id}`);
+      return response.data;
+    } catch (error) {
+      throw new Error(error.response?.data?.message || 'Failed to fetch template');
+    }
+  },
+  
+  // Create new template and submit for approval
+  createTemplate: async (templateData) => {
+    try {
+      const response = await apiClient.post('/templates', templateData);
+      return response.data;
+    } catch (error) {
+      throw new Error(error.response?.data?.message || 'Failed to create template');
+    }
+  },
+  
+  // Save template as draft
+  saveAsDraft: async (templateData) => {
+    try {
+      const response = await apiClient.post('/templates/draft', templateData);
+      return response.data;
+    } catch (error) {
+        throw new Error(error.response?.data?.message || 'Failed to save draft');
+    }
+  },
+  
+  // Update existing template
+  updateTemplate: async (id, templateData) => {
+    try {
+      const response = await apiClient.put(`/templates/${id}`, templateData);
+      return response.data;
+    } catch (error) {
+      throw new Error(error.response?.data?.message || 'Failed to update template');
+    }
+  },
+  
+  // Delete template
+  deleteTemplate: async (id) => {
+    try {
+      const response = await apiClient.delete(`/templates/${id}`);
+      return {
+        success: true,
+        message: response.data?.message || 'Template deleted successfully',
+        data: response.data
+      };
+    } catch (error) {
+      return {
+        success: false,
+        message: error.response?.data?.message || 'Failed to delete template',
+        error: error
+      };
+    }
+  },
+  
+  // Submit template for approval
+  submitForApproval: async (id) => {
+    try {
+      const response = await apiClient.post(`/templates/${id}/submit`);
+      return response.data;
+    } catch (error) {
+      throw new Error(error.response?.data?.message || 'Failed to submit template for approval');
+    }
+  }
+};
+
+export default templateService;
