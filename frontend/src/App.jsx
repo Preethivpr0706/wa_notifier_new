@@ -10,6 +10,8 @@ import SendMessage from './components/SendMessage/SendMessage';
 import Settings from './components/Settings/Settings';
 import './styles/App.css';
 import EditTemplate from './components/EditTemplate/EditTemplate';
+import ImportContacts from './components/Contact/ImportContacts';
+import ContactLists from './components/Contact/ContactLists';
 
 function App() {
   const [sidebarOpen, setSidebarOpen] = useState(true);
@@ -32,7 +34,9 @@ function App() {
             <Route path="/campaigns" element={<Campaigns />} />
             <Route path="/send-message" element={<SendMessage />} />
             <Route path="/settings" element={<Settings />} />
-          </Routes>
+            <Route path="/contacts/import" element={<ImportContacts/>}/>
+            <Route path="/contacts/list" element={<ContactLists />} />
+         </Routes>
         </div>
       </div>
     </div>

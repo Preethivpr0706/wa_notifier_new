@@ -81,4 +81,32 @@ SET SQL_SAFE_UPDATES = 0;
 INSERT INTO `whatsapp_templates`.`users` (`id`, `email`, `name`) VALUES ('1', 'preethivpr0706@gmail.com', 'Preethi');
 ALTER TABLE templates ADD COLUMN variables TEXT DEFAULT NULL;
 
+ALTER TABLE whatsapp_templates.templates
+ADD COLUMN whatsapp_id VARCHAR(255),
+ADD COLUMN whatsapp_status VARCHAR(50),
+ADD COLUMN quality_score FLOAT,
+ADD COLUMN rejection_reason TEXT;
 
+-- Create contact_lists table
+CREATE TABLE whatsapp_templates.contact_lists (
+  id VARCHAR(36) PRIMARY KEY DEFAULT (UUID()),
+  name VARCHAR(255) NOT NULL,
+  user_id VARCHAR(36) NOT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY unique_list_name (name, user_id)
+);
+
+-- Create contacts table
+CREATE TABLE whatsapp_templates.contacts (
+  id VARCHAR(36) PRIMARY KEY DEFAULT (UUID()),
+  fname VARCHAR(100),
+  lname VARCHAR(100),
+  wanumber VARCHAR(20) NOT NULL,
+  email VARCHAR(255),
+  list_id VARCHAR(36) NOT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  FOREIGN KEY (list_id) REFERENCES contact_lists(id) ON DELETE CASCADE,
+  UNIQUE KEY unique_contact_in_list (wanumber, list_id)
+);
