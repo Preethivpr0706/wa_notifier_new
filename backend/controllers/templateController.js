@@ -180,33 +180,92 @@ class TemplateController {
     }
 
     // Update a template
+
+    // In templateController.js - improved updateTemplate method 
     static async updateTemplate(req, res) {
         try {
-            const userId = 1;
-            // const userId = req.user.id;
+            const userId = 1; // Should come from auth
             const templateId = req.params.id;
 
-            // Transform the request body
+            // Ensure we have all required fields
             const templateData = {
-                name: req.body.name,
-                category: req.body.category,
-                language: req.body.language,
-                headerType: req.body.headerType || 'text',
-                headerContent: req.body.headerText || req.body.headerContent,
-                bodyText: req.body.bodyText,
-                footerText: req.body.footerText,
-                buttons: req.body.buttons || [],
-                status: req.body.status || 'pending',
-                variables: JSON.stringify(req.body.variableSamples || {})
+                ...req.body,
+                body_text: req.body.bodyText || req.body.body_text,
+                footer_text: req.body.footerText || req.body.footer_text,
+                header_content: req.body.headerContent || req.body.header_content,
+                header_type: req.body.headerType || req.body.header_type
             };
 
-            const template = await Template.update(templateId, templateData, userId);
+            // 1. Get existing template
+            const existingTemplate = await Template.getById(templateId, userId);
+            if (!existingTemplate) {
+                return res.status(404).json({
+                    success: false,
+                    message: 'Template not found'
+                });
+            }
 
-            res.status(200).json({
-                success: true,
-                message: 'Template updated successfully',
-                data: { template }
+            // 2. Update in our database first
+            const updatedTemplate = await Template.update(templateId, {
+                ...templateData,
+                user_id: userId,
+                status: 'pending' // Reset status when updating
             });
+
+            // 3. Handle WhatsApp submission if template exists in WhatsApp
+            if (existingTemplate.whatsapp_id) {
+                try {
+                    console.log('Attempting to update WhatsApp template...');
+
+                    // Ensure we're passing the correct data structure
+                    const whatsappPayload = {
+                        ...updatedTemplate,
+                        bodyText: updatedTemplate.body_text,
+                        footerText: updatedTemplate.footer_text,
+                        headerContent: updatedTemplate.header_content,
+                        headerType: updatedTemplate.header_type
+                    };
+
+                    const whatsappResponse = await WhatsAppService.updateTemplate(
+                        existingTemplate.whatsapp_id,
+                        whatsappPayload
+                    );
+
+                    // 4. Update database with any changes from WhatsApp response
+                    if (whatsappResponse.category) {
+                        await Template.updateStatus(templateId, 'pending', {
+                            category: whatsappResponse.category.toLowerCase(),
+                            whatsapp_status: whatsappResponse.status || 'PENDING'
+                        });
+                    }
+
+                    // Get the final updated template
+                    const finalTemplate = await Template.getById(templateId, userId);
+
+                    return res.status(200).json({
+                        success: true,
+                        message: 'Template updated in WhatsApp',
+                        data: {
+                            template: finalTemplate,
+                            whatsappResponse
+                        }
+                    });
+                } catch (whatsappError) {
+                    return res.status(200).json({
+                        success: true,
+                        message: 'Template updated but WhatsApp submission failed',
+                        warning: whatsappError.message,
+                        data: { template: updatedTemplate }
+                    });
+                }
+            }
+
+            return res.status(200).json({
+                success: true,
+                message: 'Template updated in database',
+                data: { template: updatedTemplate }
+            });
+
         } catch (error) {
             console.error('Error updating template:', error);
             res.status(500).json({

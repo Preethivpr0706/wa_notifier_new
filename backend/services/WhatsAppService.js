@@ -481,6 +481,168 @@ class WhatsAppService {
             throw new Error(error.response?.data?.error?.message || 'File upload failed');
         }
     }
+
+     // Update existing template on WhatsApp
+   
+static async updateTemplate(whatsappId, template) {
+    try {
+        const whatsappApiToken = process.env.WHATSAPP_API_TOKEN;
+        
+        if (!whatsappApiToken || !whatsappId) {
+            throw new Error('WhatsApp API configuration is missing or template ID is invalid');
+        }
+        
+        // Safely handle body text
+        const bodyText = template.bodyText || template.body_text || '';
+        
+        // Handle variables - ensure it's always an object
+        let variables = {};
+        try {
+            variables = typeof template.variables === 'string' ? 
+                JSON.parse(template.variables) : 
+                (template.variables || {});
+        } catch (e) {
+            console.error('Error parsing variables:', e);
+        }
+        
+        // Convert variables if body text exists
+        let processedBody = bodyText;
+        let orderedVariables = {};
+        
+        if (bodyText) {
+            const conversionResult = this.convertVariablesForWhatsApp(bodyText, variables);
+            processedBody = conversionResult.processedBody;
+            orderedVariables = conversionResult.orderedVariables;
+        }
+        
+        // Prepare components
+        const components = [];
+        
+        // Header component
+        if (template.headerType && template.headerContent) {
+            const headerType = template.headerType.toLowerCase();
+            const headerComponent = {
+                type: "HEADER",
+                format: headerType.toUpperCase()
+            };
+            
+            if (headerType === 'text') {
+                headerComponent.text = template.headerContent;
+                
+                // Add example for header text variables if needed
+                if (template.headerContent.includes('{{')) {
+                    // Extract variable names and match them with samples
+                    const headerVarRegex = /\{\{([^}]+)\}\}/g;
+                    let match;
+                    const headerVars = [];
+                    while ((match = headerVarRegex.exec(template.headerContent)) !== null) {
+                        headerVars.push(match[1]);
+                    }
+                    
+                    if (headerVars.length > 0) {
+                        headerComponent.example = {
+                            header_text: [variables[headerVars[0]] || "Example"]
+                        };
+                    }
+                }
+            } else {
+                headerComponent.example = {
+                    header_handle: [template.headerContent]
+                };
+            }
+            components.push(headerComponent);
+        }
+        
+        // Body component
+        const bodyComponent = {
+            type: "BODY",
+            text: processedBody
+        };
+        
+        if (Object.keys(orderedVariables).length > 0) {
+            bodyComponent.example = {
+                body_text: [Object.values(orderedVariables)]
+            };
+        }
+        components.push(bodyComponent);
+        
+        // Footer component
+        if (template.footerText) {
+            components.push({
+                type: "FOOTER",
+                text: template.footerText
+            });
+        }
+        
+        // Buttons component
+        if (template.buttons && template.buttons.length > 0) {
+            const buttonsComponent = {
+                type: "BUTTONS",
+                buttons: template.buttons.map(button => {
+                    const buttonConfig = { text: button.text };
+                    
+                    switch (button.type) {
+                        case 'phone_number':
+                            return {
+                                ...buttonConfig,
+                                type: 'PHONE_NUMBER',
+                                phone_number: button.value
+                            };
+                        case 'url':
+                            return {
+                                ...buttonConfig,
+                                type: 'URL',
+                                url: button.value
+                            };
+                        case 'quick_reply':
+                            return {
+                                ...buttonConfig,
+                                type: 'QUICK_REPLY'
+                            };
+                        default:
+                            throw new Error(`Invalid button type: ${button.type}`);
+                    }
+                })
+            };
+            components.push(buttonsComponent);
+        }
+        
+        // Prepare payload - note that we're not including name and language for updates
+        const payload = {
+            components
+        };
+        
+        // For rejected templates, we might need to update the category
+        if (template.status === 'rejected') {
+            payload.category = template.category.toUpperCase();
+        }
+        
+        console.log(`Updating WhatsApp template ID ${whatsappId} with payload:`, payload);
+        
+        // Use the direct template ID endpoint for updates
+        const response = await axios.post(
+            `https://graph.facebook.com/v19.0/${whatsappId}`,
+            payload,
+            {
+                headers: {
+                    'Authorization': `Bearer ${whatsappApiToken}`,
+                    'Content-Type': 'application/json'
+                }
+            }
+        );
+        
+        console.log('WhatsApp template update response:', response.data);
+        return response.data;
+    } catch (error) {
+        console.error('WhatsApp API Error:', error.response?.data || error.message);
+        throw new Error(
+            error.response?.data?.error?.message || 
+            'WhatsApp template update failed'
+        );
+    }
+}
+
+    
 }
 
 module.exports = WhatsAppService;

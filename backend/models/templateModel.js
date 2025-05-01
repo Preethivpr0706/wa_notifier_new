@@ -120,53 +120,49 @@ class Template {
     }
 
     // Update a template
-    static async update(templateId, templateData, userId) {
+    static async update(templateId, templateData) {
         const connection = await pool.getConnection();
         try {
             await connection.beginTransaction();
 
-            // Check if template exists and belongs to user
-            const [templates] = await connection.execute(
-                'SELECT id FROM templates WHERE id = ? AND user_id = ?', [templateId, userId]
-            );
+            // Update main template data
+            const updateQuery = `
+                UPDATE templates 
+                SET name = ?, 
+                    category = ?, 
+                    language = ?, 
+                    header_type = ?, 
+                    header_content = ?, 
+                    body_text = ?, 
+                    footer_text = ?,
+                    variables = ?,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE id = ? AND user_id = ?
+            `;
 
-            if (templates.length === 0) {
-                throw new Error('Template not found or not authorized');
-            }
+            await connection.execute(updateQuery, [
+                templateData.name,
+                templateData.category,
+                templateData.language,
+                templateData.headerType,
+                templateData.headerContent,
+                templateData.bodyText,
+                templateData.footerText,
+                JSON.stringify(templateData.variableSamples || {}),
+                templateId,
+                templateData.user_id
+            ]);
 
-            const {
-                name,
-                category,
-                language,
-                headerType,
-                headerContent,
-                bodyText,
-                footerText,
-                buttons = [],
-                status
-            } = templateData;
+            // Update buttons
+            if (templateData.buttons) {
+                // Delete existing buttons
+                await connection.execute(
+                    'DELETE FROM template_buttons WHERE template_id = ?', [templateId]
+                );
 
-            // Update template
-            await connection.execute(
-                `UPDATE templates SET 
-          name = ?, category = ?, language = ?, header_type = ?, 
-          header_content = ?, body_text = ?, footer_text = ?, 
-          status = ?, updated_at = CURRENT_TIMESTAMP
-         WHERE id = ?`, [
-                    name, category, language, headerType, headerContent,
-                    bodyText, footerText, status, templateId
-                ]
-            );
-
-            // Delete existing buttons
-            await connection.execute(
-                'DELETE FROM template_buttons WHERE template_id = ?', [templateId]
-            );
-
-            // Insert new buttons
-            if (buttons && buttons.length > 0) {
-                for (let i = 0; i < buttons.length; i++) {
-                    const button = buttons[i];
+                // Insert new buttons
+                for (let i = 0; i < templateData.buttons.length; i++) {
+                    const button = templateData.buttons[i];
                     await connection.execute(
                         `INSERT INTO template_buttons (
               id, template_id, type, text, value, button_order
@@ -176,7 +172,9 @@ class Template {
             }
 
             await connection.commit();
-            return { id: templateId, ...templateData };
+
+            // Return updated template
+            return await this.getById(templateId, templateData.user_id);
         } catch (error) {
             await connection.rollback();
             throw error;

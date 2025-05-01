@@ -118,14 +118,31 @@ uploadFileToSession: async (sessionId, formData, onUploadProgress) => {
   },
   
   // Update existing template
-  updateTemplate: async (id, templateData) => {
-    try {
-      const response = await apiClient.put(`/templates/${id}`, templateData);
-      return response.data;
-    } catch (error) {
-      throw new Error(error.response?.data?.message || 'Failed to update template');
-    }
-  },
+
+updateTemplate: async (id, templateData) => {
+  try {
+    // Ensure we're sending the correct data structure
+    const payload = {
+      name: templateData.name,
+      category: templateData.category,
+      language: templateData.language,
+      headerType: templateData.headerType,
+      headerContent: templateData.headerContent,
+      headerText: templateData.headerText,
+      bodyText: templateData.bodyText,
+      footerText: templateData.footerText,
+      buttons: templateData.buttons,
+      variableSamples: templateData.variableSamples,
+      status: templateData.status
+    };
+
+    const response = await apiClient.put(`/templates/${id}`, payload);
+    return response.data;
+  } catch (error) {
+    console.error('Update template error:', error.response?.data || error);
+    throw new Error(error.response?.data?.message || 'Failed to update template');
+  }
+},
   
   // Delete template
   deleteTemplate: async (id) => {

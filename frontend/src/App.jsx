@@ -9,6 +9,7 @@ import Campaigns from './components/Campaigns/Campaigns';
 import SendMessage from './components/SendMessage/SendMessage';
 import Settings from './components/Settings/Settings';
 import './styles/App.css';
+import EditTemplate from './components/EditTemplate/EditTemplate';
 
 function App() {
   const [sidebarOpen, setSidebarOpen] = useState(true);
@@ -26,7 +27,8 @@ function App() {
           <Routes>
             <Route path="/" element={<Dashboard />} />
             <Route path="/templates" element={<MessageTemplates />} />
-            <Route path="/templates/create" element={<CreateTemplate />} />
+        <Route path="/templates/create" element={<CreateTemplate />} />
+        <Route path="/templates/edit/:id" element={<EditTemplate/>} />
             <Route path="/campaigns" element={<Campaigns />} />
             <Route path="/send-message" element={<SendMessage />} />
             <Route path="/settings" element={<Settings />} />

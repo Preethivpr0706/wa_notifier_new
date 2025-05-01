@@ -57,10 +57,15 @@ function MessageTemplates() {
     navigate('/templates/create');
   };
 
-  const handleEditTemplate = (id) => {
-    navigate(`/templates/edit/${id}`);
-  };
-
+  // In the handleEditTemplate function
+const handleEditTemplate = (id) => {
+  const templateToEdit = templates.find(t => t.id === id);
+  if (templateToEdit) {
+    navigate(`/templates/edit/${id}`, { 
+      state: { template: templateToEdit } 
+    });
+  }
+};
   const handlePreviewTemplate = (template) => {
     setSelectedTemplate(template);
   };
