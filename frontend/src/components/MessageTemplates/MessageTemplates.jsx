@@ -58,14 +58,22 @@ function MessageTemplates() {
   };
 
   // In the handleEditTemplate function
-const handleEditTemplate = (id) => {
-  const templateToEdit = templates.find(t => t.id === id);
-  if (templateToEdit) {
-    navigate(`/templates/edit/${id}`, { 
-      state: { template: templateToEdit } 
-    });
-  }
-};
+  const handleEditTemplate = (template) => {
+    if (template.status === 'draft') {
+      // For drafts, navigate to create page with template data
+      navigate('/templates/create', { 
+        state: { 
+          draftTemplate: template,
+          isEditingDraft: true 
+        } 
+      });
+    } else {
+      // For submitted templates, go to edit page
+      navigate(`/templates/edit/${template.id}`, { 
+        state: { template } 
+      });
+    }
+  };
   const handlePreviewTemplate = (template) => {
     setSelectedTemplate(template);
   };
@@ -90,12 +98,27 @@ const handleEditTemplate = (id) => {
       setIsDeleting(true);
       setError(null);
       
+      // Check if it's a draft template (only delete from DB)
+      if (templateToDelete?.status === 'draft') {
+        const response = await templateService.deleteTemplate(deleteConfirm);
+        
+        if (response.success) {
+          setTemplates(templates.filter(t => t.id !== deleteConfirm));
+          setDeleteConfirm(null);
+          setTemplateToDelete(null);
+        } else {
+          setError(response.message || 'Failed to delete template');
+        }
+        return;
+      }
+      
+      // For non-draft templates, proceed with normal delete flow
       const response = await templateService.deleteTemplate(deleteConfirm);
       
       if (response.success) {
         setTemplates(templates.filter(t => t.id !== deleteConfirm));
         setDeleteConfirm(null);
-        setTemplateToDelete(null); // Clear the template reference
+        setTemplateToDelete(null);
       } else {
         setError(response.message || 'Failed to delete template');
       }
@@ -175,17 +198,39 @@ const handleEditTemplate = (id) => {
     };
   }, [templates]);
 
-  // Add function to handle manual status check
+  const [isCheckingStatus, setIsCheckingStatus] = useState(false);
+
   const handleCheckStatus = async (templateId) => {
     try {
+      setIsCheckingStatus(true);
       setError(null);
       await templateService.checkTemplateStatus(templateId);
-      fetchTemplates();
+      fetchTemplates(); // Refresh the list to show updated status
     } catch (err) {
       setError('Failed to check template status: ' + err.message);
+    } finally {
+      setIsCheckingStatus(false);
     }
   };
 
+  const handleSubmitDraft = async (templateId) => {
+    try {
+      setIsLoading(true);
+      setError(null);
+      
+      const response = await templateService.submitDraftTemplate(templateId);
+      
+      if (response.success) {
+        fetchTemplates(); // Refresh the list
+      } else {
+        setError(response.message || 'Failed to submit draft template');
+      }
+    } catch (err) {
+      setError('Failed to submit draft template: ' + err.message);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   return (
     <div className="message-templates">
@@ -282,14 +327,15 @@ const handleEditTemplate = (id) => {
           {template.status}
         </div>
         {template.status === 'pending' && (
-          <button 
-            className="btn-icon" 
-            onClick={() => handleCheckStatus(template.id)}
-            title="Check status"
-          >
-            <RefreshCw size={16} />
-          </button>
-        )}
+  <button 
+    className="btn-icon" 
+    onClick={() => handleCheckStatus(template.id)}
+    title="Check status"
+    disabled={isCheckingStatus}
+  >
+    <RefreshCw size={16} className={isCheckingStatus ? "spinning" : ""} />
+  </button>
+)}
         {template.status === 'rejected' && template.rejection_reason && (
           <div className="rejection-reason">
             Reason: {template.rejection_reason}
@@ -324,31 +370,44 @@ const handleEditTemplate = (id) => {
               </div>
               
               <div className="template-actions">
-                <button 
-                  className="btn-secondary"
-                  onClick={() => handlePreviewTemplate(template)}
-                >
-                  <Eye size={16} />
-                  <span>Preview</span>
-                </button>
-                
-                <div className="action-buttons">
-                  <button 
-                    className="action-btn"
-                    onClick={() => handleEditTemplate(template.id)}
-                    title="Edit template"
-                  >
-                    <Edit size={16} />
-                  </button>
-                  <button 
-                    className="action-btn delete-btn"
-                    onClick={() => confirmDelete(template.id)}
-                    title="Delete template"
-                  >
-                    <Trash size={16} />
-                  </button>
-                </div>
-              </div>
+  <button 
+    className="btn-secondary"
+    onClick={() => handlePreviewTemplate(template)}
+  >
+    <Eye size={16} />
+    <span>Preview</span>
+  </button>
+  
+  {template.status === 'draft' && (
+    <button
+      className="btn btn-primary"
+      onClick={() => handleSubmitDraft(template.id)}
+      disabled={isLoading}
+    >
+      <RefreshCw size={16} />
+      <span>Submit</span>
+    </button>
+  )}
+  
+  <div className="action-buttons">
+ 
+<button 
+  className="action-btn"
+  onClick={() => handleEditTemplate(template)}
+  title={template.status === 'draft' ? 'Continue editing' : 'Edit template'}
+>
+  <Edit size={16} />
+</button>
+
+    <button 
+      className="action-btn delete-btn"
+      onClick={() => confirmDelete(template.id)}
+      title="Delete template"
+    >
+      <Trash size={16} />
+    </button>
+  </div>
+</div>
             </div>
           ))}
         </div>
@@ -358,12 +417,14 @@ const handleEditTemplate = (id) => {
   <div className="modal-overlay">
     <div className="modal-content">
       <h3>Delete Template?</h3>
-      {templateToDelete?.whatsapp_id && (
+      {templateToDelete?.status === 'draft' ? (
+        <p>This draft template will be permanently deleted from the system.</p>
+      ) : templateToDelete?.whatsapp_id ? (
         <div className="whatsapp-warning">
           <AlertCircle size={16} />
           <span>This template is registered with WhatsApp (ID: {templateToDelete.whatsapp_id})</span>
         </div>
-      )}
+      ) : null}
       <p>Are you sure you want to delete "{templateToDelete?.name}"?</p>
       <div className="modal-actions">
         <button className="btn btn-secondary" onClick={cancelDelete}>

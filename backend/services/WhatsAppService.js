@@ -21,6 +21,7 @@ class WhatsAppService {
             const variableSamples = typeof template.variables === 'string' ?
                 JSON.parse(template.variables) :
                 (template.variables || {});
+            console.log(variableSamples);
 
             // Convert named variables to numbered format for WhatsApp
             const { processedBody, variableMapping, orderedVariables } = this.convertVariablesForWhatsApp(
@@ -198,7 +199,7 @@ class WhatsAppService {
                     nextNumber++;
                 }
             });
-
+            console.log(bodyText);
             // Replace all variables with numbered ones
             const processedBody = bodyText.replace(/\{\{([^}]+)\}\}/g, (match, varName) => {
                 return `{{${variableMapping[varName]}}}`;
@@ -295,6 +296,7 @@ class WhatsAppService {
 
             if (response.data.data && response.data.data.length > 0) {
                 const whatsappTemplate = response.data.data[0];
+                console.log(whatsappTemplate);
                 const status = whatsappTemplate.status.toLowerCase();
 
                 // Map WhatsApp status to our status
@@ -315,7 +317,10 @@ class WhatsAppService {
                     default:
                         templateStatus = 'pending';
                 }
-
+                console.log(templateStatus);
+                console.log(whatsappTemplate.status);
+                console.log(whatsappTemplate.rejection_reason);
+                console.log(whatsappTemplate.quality_score);
                 return {
                     status: templateStatus,
                     whatsappStatus: whatsappTemplate.status,
@@ -486,6 +491,14 @@ class WhatsAppService {
    
 static async updateTemplate(whatsappId, template) {
     try {
+        // Check if name, category, or language were modified
+        if (
+            template.name !== originalTemplate.name ||
+            template.category !== originalTemplate.category ||
+            template.language !== originalTemplate.language
+        ) {
+            throw new Error("Cannot update template: Name, category, or language cannot be changed after WhatsApp submission.");
+        }
         const whatsappApiToken = process.env.WHATSAPP_API_TOKEN;
         
         if (!whatsappApiToken || !whatsappId) {

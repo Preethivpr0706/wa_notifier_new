@@ -70,7 +70,7 @@ class TemplateController {
         // Save template as draft
     static async saveAsDraft(req, res) {
         try {
-            const userId = req.user.id;
+            const userId = 1;
 
             // Transform the request body
             const templateData = {
@@ -123,8 +123,8 @@ class TemplateController {
                         if (statusUpdate.status !== template.status) {
                             return await Template.updateStatus(template.id, statusUpdate.status, {
                                 whatsapp_status: statusUpdate.whatsappStatus,
-                                quality_score: statusUpdate.qualityScore,
-                                rejection_reason: statusUpdate.rejectionReason
+                                quality_score: statusUpdate.qualityScore || null,
+                                rejection_reason: statusUpdate.rejectionReason || null
                             });
                         }
                     } catch (error) {
@@ -217,7 +217,6 @@ class TemplateController {
                 try {
                     console.log('Attempting to update WhatsApp template...');
 
-                    // Ensure we're passing the correct data structure
                     const whatsappPayload = {
                         ...updatedTemplate,
                         bodyText: updatedTemplate.body_text,
@@ -228,25 +227,22 @@ class TemplateController {
 
                     const whatsappResponse = await WhatsAppService.updateTemplate(
                         existingTemplate.whatsapp_id,
-                        whatsappPayload
+                        whatsappPayload,
+                        existingTemplate // Pass original template for validation
                     );
-
-                    // 4. Update database with any changes from WhatsApp response
+                    // Update the category in our database based on WhatsApp's response
                     if (whatsappResponse.category) {
-                        await Template.updateStatus(templateId, 'pending', {
+                        await Template.update(templateId, {
                             category: whatsappResponse.category.toLowerCase(),
-                            whatsapp_status: whatsappResponse.status || 'PENDING'
+                            user_id: userId
                         });
                     }
 
-                    // Get the final updated template
-                    const finalTemplate = await Template.getById(templateId, userId);
-
                     return res.status(200).json({
                         success: true,
-                        message: 'Template updated in WhatsApp',
+                        message: 'Template update submitted to WhatsApp',
                         data: {
-                            template: finalTemplate,
+                            template: updatedTemplate,
                             whatsappResponse
                         }
                     });
@@ -381,6 +377,169 @@ class TemplateController {
             res.status(500).json({
                 success: false,
                 message: 'Failed to submit template for approval',
+                error: error.message
+            });
+        }
+    }
+
+    // Add this new method to TemplateController
+    static async submitDraftTemplate(req, res) {
+            try {
+                const userId = 1; // Should come from auth
+                const templateId = req.params.id;
+
+                // 1. Get the draft template
+                const template = await Template.getById(templateId, userId);
+                if (!template) {
+                    return res.status(404).json({
+                        success: false,
+                        message: 'Template not found'
+                    });
+                }
+
+                if (template.status !== 'draft') {
+                    return res.status(400).json({
+                        success: false,
+                        message: 'Only draft templates can be submitted'
+                    });
+                }
+                // Transform the template data to camelCase
+                const transformedTemplate = {
+                    id: template.id,
+                    name: template.name,
+                    category: template.category,
+                    language: template.language,
+                    headerType: template.header_type,
+                    headerContent: template.header_content,
+                    bodyText: template.body_text,
+                    footerText: template.footer_text,
+                    status: template.status,
+                    created_at: template.created_at,
+                    updated_at: template.updated_at,
+                    userId: template.user_id,
+                    variables: template.variables,
+                    whatsapp_id: template.whatsapp_id,
+                    whatsapp_status: template.whatsapp_status,
+                    quality_score: template.quality_score,
+                    rejection_reason: template.rejection_reason,
+                    buttons: template.buttons
+                };
+
+                // 2. Submit to WhatsApp
+                const whatsappResponse = await WhatsAppService.submitTemplate(transformedTemplate);
+
+                // 3. Update template status
+                const updatedTemplate = await Template.updateStatus(
+                    templateId,
+                    'pending', {
+                        whatsapp_id: whatsappResponse.id,
+                        whatsapp_status: whatsappResponse.status,
+                        user_id: userId
+                    }
+                );
+
+                res.status(200).json({
+                    success: true,
+                    message: 'Draft template submitted to WhatsApp',
+                    data: {
+                        template: updatedTemplate,
+                        whatsappResponse
+                    }
+                });
+            } catch (error) {
+                console.error('Error submitting draft template:', error);
+                res.status(500).json({
+                    success: false,
+                    message: 'Failed to submit draft template',
+                    error: error.message
+                });
+            }
+        }
+        // Add this new method
+    static async updateDraftTemplate(req, res) {
+        try {
+            const userId = 1; // Should come from auth
+            const templateId = req.params.id;
+            const templateData = req.body;
+
+            // Verify template exists and is a draft
+            const existingTemplate = await Template.getById(templateId, userId);
+            if (!existingTemplate || existingTemplate.status !== 'draft') {
+                return res.status(400).json({
+                    success: false,
+                    message: 'Only draft templates can be updated this way'
+                });
+            }
+
+            // Update the draft
+            const updatedTemplate = await Template.update(templateId, {
+                ...templateData,
+                user_id: userId,
+                status: 'draft' // Maintain draft status
+            });
+
+            res.status(200).json({
+                success: true,
+                message: 'Draft template updated',
+                data: { template: updatedTemplate }
+            });
+        } catch (error) {
+            console.error('Error updating draft template:', error);
+            res.status(500).json({
+                success: false,
+                message: 'Failed to update draft template',
+                error: error.message
+            });
+        }
+    }
+
+    static async checkTemplateStatus(req, res) {
+        try {
+            const userId = 1; // Should come from auth
+            const templateId = req.params.id;
+
+            // Get the template from our database
+            const template = await Template.getById(templateId, userId);
+            if (!template) {
+                return res.status(404).json({
+                    success: false,
+                    message: 'Template not found'
+                });
+            }
+
+            // Only check status for pending templates with WhatsApp ID
+            if (template.status === 'pending' && template.whatsapp_id) {
+                const statusUpdate = await WhatsAppService.checkAndUpdateTemplateStatus(template);
+
+                // Update our database with the new status
+                const updatedTemplate = await Template.updateStatus(
+                    templateId,
+                    statusUpdate.status, {
+                        whatsapp_status: statusUpdate.whatsappStatus,
+                        quality_score: statusUpdate.qualityScore,
+                        rejection_reason: statusUpdate.rejectionReason,
+                        user_id: userId
+                    }
+                );
+
+                return res.status(200).json({
+                    success: true,
+                    message: 'Template status checked and updated',
+                    data: { template: updatedTemplate }
+                });
+            }
+
+            // For non-pending templates or those without WhatsApp ID
+            return res.status(200).json({
+                success: true,
+                message: 'No status check needed',
+                data: { template }
+            });
+        } catch (error) {
+            console.error('Error checking template status:', error);
+            res.status(500).json({
+                success: false,
+                message: 'Failed to check template status',
                 error: error.message
             });
         }

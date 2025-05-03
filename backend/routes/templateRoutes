@@ -25,9 +25,15 @@ router.get('/:id', TemplateController.getTemplateById);
 router.put('/:id', TemplateController.updateTemplate);
 router.delete('/:id', TemplateController.deleteTemplate);
 router.post('/:id/submit', TemplateController.submitForApproval);
+router.post('/:id/submit-draft', TemplateController.submitDraftTemplate);
+// Add this new route
+router.put('/draft/:id', TemplateController.updateDraftTemplate);
 
 // Media upload routes (new)
 router.post('/media/create-session', createUploadSession);
 router.post('/media/upload/:sessionId', upload.single('file'), uploadFile);
 
+
+// Add this route with the others
+router.get('/:id/check-status', TemplateController.checkTemplateStatus);
 module.exports = router;

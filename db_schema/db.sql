@@ -110,3 +110,7 @@ CREATE TABLE whatsapp_templates.contacts (
   FOREIGN KEY (list_id) REFERENCES contact_lists(id) ON DELETE CASCADE,
   UNIQUE KEY unique_contact_in_list (wanumber, list_id)
 );
+
+
+
+alter table whatsapp_templates.templates modify column header_type ENUM('text', 'image', 'video','none') NOT NULL;

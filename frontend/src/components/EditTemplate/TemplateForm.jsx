@@ -9,7 +9,7 @@ const TemplateForm = forwardRef(({ initialData, onSubmit, isSubmitting }, ref) =
       name: '',
       category: 'marketing',
       language: 'en',
-      headerType: 'text',
+      headerType: 'none',
       headerText: '',
       headerContent: '',
       bodyText: '',
@@ -28,6 +28,7 @@ const TemplateForm = forwardRef(({ initialData, onSubmit, isSubmitting }, ref) =
   const [uploadProgress, setUploadProgress] = useState(0);
   const fileInputRef = useRef(null);
   const formRef = useRef(null);
+  const isSubmittedToWhatsApp = !!initialData?.whatsapp_id;
 
   // Expose methods to parent component through the ref
   useImperativeHandle(ref, () => ({
@@ -92,57 +93,64 @@ const TemplateForm = forwardRef(({ initialData, onSubmit, isSubmitting }, ref) =
     handleFormSubmit();
   };
 
-  // Separate function to handle form submission logic
-  const handleFormSubmit = async () => {
-    const validationErrors = validateForm();
-    
-    if (Object.keys(validationErrors).length === 0) {
+
+  // Update the validateForm function
+const validateForm = () => {
+  const errors = {};
+  
+  if (!formData.name.trim()) {
+      errors.name = 'Template name is required';
+  }
+  
+  if (!formData.bodyText.trim()) {
+      errors.bodyText = 'Body text is required';
+  }
+  
+  // Remove header validation to make it optional
+  // if (formData.headerType === 'text' && !formData.headerText.trim()) {
+  //     errors.headerText = 'Header text is required';
+  // }
+  
+  // if ((formData.headerType === 'image' || formData.headerType === 'video') && !headerFile && !formData.headerContent) {
+  //     errors.header = `${formData.headerType === 'image' ? 'Image' : 'Video'} is required`;
+  // }
+  
+  return errors;
+};
+
+// Update the handleSubmit function to handle empty headers
+const handleFormSubmit = async () => {
+  const validationErrors = validateForm();
+  
+  if (Object.keys(validationErrors).length === 0) {
       let headerContent = formData.headerContent;
       
-      if ((formData.headerType === 'image' || formData.headerType === 'video') && headerFile) {
-        try {
-          setIsUploading(true);
-          const mediaHandle = await uploadFile(headerFile);
-          if (mediaHandle) {
-            headerContent = mediaHandle;
+      // Only process header if there's content
+      if (formData.headerType !== 'none' && 
+          ((formData.headerType === 'text' && formData.headerText) || 
+           ((formData.headerType === 'image' || formData.headerType === 'video') && headerFile))) {
+          try {
+              setIsUploading(true);
+              const mediaHandle = await uploadFile(headerFile);
+              if (mediaHandle) {
+                  headerContent = mediaHandle;
+              }
+          } catch (error) {
+              setErrors({ ...errors, header: 'Failed to upload file: ' + error.message });
+              setIsUploading(false);
+              return;
           }
-        } catch (error) {
-          setErrors({ ...errors, header: 'Failed to upload file: ' + error.message });
-          setIsUploading(false);
-          return;
-        }
       }
 
       onSubmit({
-        ...formData,
-        headerContent: formData.headerType === 'text' ? formData.headerText : headerContent
+          ...formData,
+          headerType: formData.headerType === 'none' ? null : formData.headerType,
+          headerContent: formData.headerType === 'text' ? formData.headerText : headerContent
       });
-    } else {
+  } else {
       setErrors(validationErrors);
-    }
-  };
-
-  const validateForm = () => {
-    const errors = {};
-    
-    if (!formData.name.trim()) {
-      errors.name = 'Template name is required';
-    }
-    
-    if (!formData.bodyText.trim()) {
-      errors.bodyText = 'Body text is required';
-    }
-    
-    if (formData.headerType === 'text' && !formData.headerText.trim()) {
-      errors.headerText = 'Header text is required';
-    }
-    
-    if ((formData.headerType === 'image' || formData.headerType === 'video') && !headerFile && !formData.headerContent) {
-      errors.header = `${formData.headerType === 'image' ? 'Image' : 'Video'} is required`;
-    }
-    
-    return errors;
-  };
+  }
+};
 
   const extractVariables = (text) => {
     const matches = text.match(/{{(\w+)}}/g) || [];
@@ -310,6 +318,7 @@ const TemplateForm = forwardRef(({ initialData, onSubmit, isSubmitting }, ref) =
     return (
       <div className="header-section">
         <div className="header-type-selector">
+        <button type="button" className={`type-option ${formData.headerType==='none'?'active':''}`} onClick={() => handleHeaderTypeChange('none')}>None</button>
           <button
             type="button"
             className={`type-option ${formData.headerType === 'text' ? 'active' : ''}`}
@@ -729,54 +738,58 @@ const TemplateForm = forwardRef(({ initialData, onSubmit, isSubmitting }, ref) =
         <div className="form-section">
           <h3>Template Information</h3>
           <div className="form-fields">
-            <div className="form-field">
-              <label htmlFor="template-name">Template Name</label>
-              <input
-                type="text"
-                id="template-name"
-                name="name"
-                value={formData.name}
-                onChange={handleChange}
-                placeholder="Enter template name"
-                required
-              />
-              {errors.name && <span className="error">{errors.name}</span>}
-            </div>
+          <div className="form-field">
+    <label htmlFor="template-name">Template Name</label>
+    <input
+        type="text"
+        id="template-name"
+        name="name"
+        value={formData.name}
+        onChange={handleChange}
+        placeholder="Enter template name"
+        required
+        disabled={isSubmittedToWhatsApp}  // Disable if already on WhatsApp
+    />
+    {errors.name && <span className="error">{errors.name}</span>}
+</div>
+
             
             <div className="form-row">
-              <div className="form-field">
-                <label htmlFor="template-category">Category</label>
-                <select
-                  id="template-category"
-                  name="category"
-                  value={formData.category}
-                  onChange={handleChange}
-                  required
-                >
-                  {CATEGORIES.map(category => (
-                    <option key={category.value} value={category.value}>
-                      {category.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              
-              <div className="form-field">
-                <label htmlFor="template-language">Language</label>
-                <select
-                  id="template-language"
-                  name="language"
-                  value={formData.language}
-                  onChange={handleChange}
-                  required
-                >
-                  {LANGUAGES.map(lang => (
-                    <option key={lang.value} value={lang.value}>
-                      {lang.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
+            <div className="form-field">
+    <label htmlFor="template-category">Category</label>
+    <select
+        id="template-category"
+        name="category"
+        value={formData.category}
+        onChange={handleChange}
+        required
+        disabled={isSubmittedToWhatsApp}  // Disable if already on WhatsApp
+    >
+        {CATEGORIES.map(category => (
+            <option key={category.value} value={category.value}>
+                {category.label}
+            </option>
+        ))}
+    </select>
+</div>
+
+<div className="form-field">
+    <label htmlFor="template-language">Language</label>
+    <select
+        id="template-language"
+        name="language"
+        value={formData.language}
+        onChange={handleChange}
+        required
+        disabled={isSubmittedToWhatsApp}  // Disable if already on WhatsApp
+    >
+        {LANGUAGES.map(lang => (
+            <option key={lang.value} value={lang.value}>
+                {lang.label}
+            </option>
+        ))}
+    </select>
+</div>
             </div>
           </div>
         </div>

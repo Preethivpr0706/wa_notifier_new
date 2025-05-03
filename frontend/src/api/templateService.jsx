@@ -170,7 +170,34 @@ updateTemplate: async (id, templateData) => {
     } catch (error) {
       throw new Error(error.response?.data?.message || 'Failed to submit template for approval');
     }
+  },
+  // Add this to templateService
+submitDraftTemplate: async (templateId) => {
+  try {
+    const response = await apiClient.post(`/templates/${templateId}/submit-draft`);
+    return response.data;
+  } catch (error) {
+    throw new Error(error.response?.data?.message || 'Failed to submit draft template');
   }
+},
+// Add this method
+updateDraftTemplate: async (templateId, templateData) => {
+  try {
+    const response = await apiClient.put(`/templates/draft/${templateId}`, templateData);
+    return response.data;
+  } catch (error) {
+    throw new Error(error.response?.data?.message || 'Failed to update draft template');
+  }
+},
+// In templateService.js
+checkTemplateStatus: async (templateId) => {
+  try {
+    const response = await apiClient.get(`/templates/${templateId}/check-status`);
+    return response.data;
+  } catch (error) {
+    throw new Error(error.response?.data?.message || 'Failed to check template status');
+  }
+},
 };
 
 export default templateService;

@@ -144,7 +144,7 @@ class Template {
                 templateData.name,
                 templateData.category,
                 templateData.language,
-                templateData.headerType,
+                templateData.headerType || 'none',
                 templateData.headerContent,
                 templateData.bodyText,
                 templateData.footerText,
@@ -288,7 +288,44 @@ class Template {
         );
         return templates;
       }
-    
+    // In the updateStatus method, ensure it handles the whatsapp_id update
+static async updateStatus(templateId, status, additionalData = {}) {
+    console.log(templateId, status, additionalData);
+    const connection = await pool.getConnection();
+    try {
+      await connection.beginTransaction();
+  
+      const updateData = {
+        status,
+        ...additionalData
+      };
+  
+      // Handle whatsapp_id specifically
+      if (additionalData.whatsapp_id) {
+        updateData.whatsapp_id = additionalData.whatsapp_id;
+      }
+  
+      const columns = Object.keys(updateData);
+      const values = Object.values(updateData);
+  
+      const query = `
+        UPDATE templates 
+        SET ${columns.map(col => `${col} = ?`).join(', ')},
+            updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?
+      `;
+  
+      await connection.execute(query, [...values, templateId]);
+      await connection.commit();
+      
+      return await this.getById(templateId, additionalData.user_id || 1);
+    } catch (error) {
+      await connection.rollback();
+      throw error;
+    } finally {
+      connection.release();
+    }
+  }
 }
 
 module.exports = Template;

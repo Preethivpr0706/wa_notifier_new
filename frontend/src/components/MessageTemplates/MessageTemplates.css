@@ -512,3 +512,41 @@
 .whatsapp-warning svg {
     flex-shrink: 0;
 }
+
+
+/* Add these styles for the submit button */
+
+.template-actions .btn {
+    padding: 0.5rem 1rem;
+    margin-right: 0.5rem;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.template-actions .btn-primary {
+    background-color: #25D366;
+    color: white;
+}
+
+.template-actions .btn-primary:hover {
+    background-color: #128C7E;
+}
+
+.template-actions .btn-primary:disabled {
+    background-color: #cccccc;
+    cursor: not-allowed;
+}
+
+@keyframes spin {
+    from {
+        transform: rotate(0deg);
+    }
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+.spinning {
+    animation: spin 1s linear infinite;
+}
