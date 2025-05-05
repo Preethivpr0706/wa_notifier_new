@@ -26,6 +26,20 @@ router.get('/', ContactController.getContacts);
 router.get('/:id', ContactController.getContactById);
 router.put('/:id', ContactController.updateContact);
 router.delete('/:id', ContactController.deleteContact);
+router.get('/user-contacts', async(req, res) => {
+    try {
+        const contacts = await ContactController.getAllByUser(req.user.id);
+        res.json({
+            success: true,
+            data: contacts
+        });
+    } catch (error) {
+        res.status(500).json({
+            success: false,
+            message: 'Failed to fetch user contacts'
+        });
+    }
+});
 
 
 module.exports = router;

@@ -5,6 +5,7 @@ const { testConnection } = require('./config/database');
 const templateRoutes = require('./routes/templateRoutes');
 // Add this with other route imports
 const contactRoutes = require('./routes/contactRoutes');
+const messageRoutes = require('./routes/messageRoutes');
 
 require('dotenv').config();
 
@@ -24,6 +25,8 @@ app.use('/api/templates', templateRoutes);
 
 // Add this with other route middleware
 app.use('/api/contacts', contactRoutes);
+
+app.use('/api/messages/', messageRoutes);
 
 // Root route
 app.get('/', (req, res) => {

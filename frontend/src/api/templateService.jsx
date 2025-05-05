@@ -198,6 +198,41 @@ checkTemplateStatus: async (templateId) => {
     throw new Error(error.response?.data?.message || 'Failed to check template status');
   }
 },
+sendMessages: async (payload) => {
+  try {
+    const response = await apiClient.post('/templates/send-messages', payload);
+    return response.data;
+  } catch (error) {
+    throw new Error(error.response?.data?.message || 'Failed to send messages');
+  }
+},
+ // Add this new method for WhatsApp media upload
+ uploadMediaToWhatsApp: async (file, templateId, headerType) => {
+  try {
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('templateId', templateId);
+    formData.append('headerType', headerType);
+
+    const response = await apiClient.post(
+      '/templates/upload-media', 
+      formData,
+      {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+      }
+    );
+
+    return response.data;
+  } catch (error) {
+    console.error('Media upload error:', error.response?.data || error);
+    throw new Error(
+      error.response?.data?.message || 
+      'Failed to upload media to WhatsApp'
+    );
+  }
+},
 };
 
 export default templateService;

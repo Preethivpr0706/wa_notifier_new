@@ -1,118 +1,143 @@
-import { useState } from 'react';
-import { Search, Filter, Calendar, Clock, Eye, Play, Edit, Trash, Plus } from 'lucide-react';
+// src/pages/Campaigns.jsx
+import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { 
+  Search, Filter, Calendar, Clock, Eye, Play, 
+  Edit, Trash, Plus, AlertCircle, RefreshCw 
+} from 'lucide-react';
+import { campaignService } from '../../api/campaignService';
 import './Campaigns.css';
 
 function Campaigns() {
+  const navigate = useNavigate();
+  const [campaigns, setCampaigns] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [activeFilter, setActiveFilter] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
-  
-  const campaigns = [
-    {
-      id: 1,
-      name: 'May Product Launch',
-      template: 'Product Launch Announcement',
-      recipients: 2500,
-      status: 'sent',
-      delivered: 2450,
-      read: 1987,
-      date: '05/15/2023',
-      time: '10:00 AM'
-    },
-    {
-      id: 2,
-      name: 'Weekend Flash Sale',
-      template: 'Limited Time Offer',
-      recipients: 5000,
-      status: 'scheduled',
-      delivered: 0,
-      read: 0,
-      date: '05/20/2023',
-      time: '08:00 AM'
-    },
-    {
-      id: 3,
-      name: 'Customer Feedback Survey',
-      template: 'Survey Request',
-      recipients: 1200,
-      status: 'sent',
-      delivered: 1180,
-      read: 964,
-      date: '05/10/2023',
-      time: '09:30 AM'
-    },
-    {
-      id: 4,
-      name: 'Webinar Registration',
-      template: 'Event Invitation',
-      recipients: 3800,
-      status: 'scheduled',
-      delivered: 0,
-      read: 0,
-      date: '05/25/2023',
-      time: '02:00 PM'
-    },
-    {
-      id: 5,
-      name: 'New Feature Announcement',
-      template: 'Product Update',
-      recipients: 4200,
-      status: 'failed',
-      delivered: 3800,
-      read: 0,
-      date: '05/08/2023',
-      time: '11:00 AM'
-    },
-    {
-      id: 6,
-      name: 'Customer Loyalty Program',
-      template: 'Loyalty Rewards',
-      recipients: 2800,
-      status: 'draft',
-      delivered: 0,
-      read: 0,
-      date: '',
-      time: ''
-    }
-  ];
+  const [deleteConfirm, setDeleteConfirm] = useState(null);
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
+  // Fetch campaigns
+  const fetchCampaigns = async () => {
+    try {
+      setIsLoading(true);
+      setError(null);
+      
+      const filters = {};
+      if (activeFilter !== 'all') {
+        filters.status = activeFilter;
+      }
+      
+      const response = await campaignService.getCampaigns(filters);
+      setCampaigns(response.data?.campaigns || []);
+    } catch (err) {
+      setError('Failed to load campaigns: ' + (err.response?.data?.message || err.message));
+    } finally {
+      setIsLoading(false);
+      setIsRefreshing(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchCampaigns();
+  }, [activeFilter]);
+
+  // Handle filter change
   const handleFilterChange = (filter) => {
     setActiveFilter(filter);
   };
 
+  // Handle search
   const handleSearchChange = (e) => {
     setSearchQuery(e.target.value);
   };
 
+  // Confirm delete
+  const confirmDelete = (id) => {
+    setDeleteConfirm(id);
+  };
+
+  // Cancel delete
+  const cancelDelete = () => {
+    setDeleteConfirm(null);
+  };
+
+  // Delete campaign
+  const deleteCampaign = async () => {
+    try {
+      setIsLoading(true);
+      setError(null);
+      
+      await campaignService.deleteCampaign(deleteConfirm);
+      setCampaigns(campaigns.filter(c => c.id !== deleteConfirm));
+      setDeleteConfirm(null);
+    } catch (err) {
+      setError('Failed to delete campaign: ' + (err.response?.data?.message || err.message));
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Refresh campaigns
+  const refreshCampaigns = async () => {
+    setIsRefreshing(true);
+    await fetchCampaigns();
+  };
+
+  // Filter campaigns by search
   const filteredCampaigns = campaigns.filter((campaign) => {
-    const matchesFilter = activeFilter === 'all' || campaign.status === activeFilter;
-    const matchesSearch = campaign.name.toLowerCase().includes(searchQuery.toLowerCase());
-    return matchesFilter && matchesSearch;
+    const matchesSearch = campaign.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (campaign.template_name && campaign.template_name.toLowerCase().includes(searchQuery.toLowerCase()));
+    return matchesSearch;
   });
 
+  // Get status class
   const getStatusClass = (status) => {
-    switch (status) {
-      case 'sent':
-        return 'status-sent';
-      case 'scheduled':
-        return 'status-scheduled';
-      case 'draft':
-        return 'status-draft';
-      case 'failed':
-        return 'status-failed';
-      default:
-        return '';
-    }
+    const statusClasses = {
+      completed: 'status-completed',
+      sending: 'status-sending',
+      scheduled: 'status-scheduled',
+      draft: 'status-draft',
+      failed: 'status-failed',
+      partial: 'status-partial'
+    };
+    return statusClasses[status] || '';
+  };
+
+  // Format date
+  const formatDate = (dateString) => {
+    if (!dateString) return 'Not scheduled';
+    const options = { 
+      year: 'numeric', 
+      month: 'short', 
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    };
+    return new Date(dateString).toLocaleString(undefined, options);
+  };
+
+  // Calculate percentages
+  const calculatePercentage = (part, total) => {
+    if (total === 0) return '0%';
+    return `${Math.round((part / total) * 100)}%`;
   };
 
   return (
     <div className="campaigns">
       <div className="page-header">
         <h2>Campaigns</h2>
-        <a href="/campaigns/create" className="btn btn-primary">
+        <button 
+          onClick={() => navigate('/campaigns/create')} 
+          className="btn btn-primary"
+        >
           <Plus size={16} />
           <span>Create Campaign</span>
-        </a>
+        </button>
       </div>
+
+      {error && <div className="error-alert">{error}</div>}
 
       <div className="filters-bar">
         <div className="search-container">
@@ -124,7 +149,15 @@ function Campaigns() {
             onChange={handleSearchChange}
             className="search-input"
           />
+          <button 
+            onClick={refreshCampaigns}
+            className="btn-icon refresh-btn"
+            disabled={isRefreshing}
+          >
+            <RefreshCw size={16} className={isRefreshing ? "spinning" : ""} />
+          </button>
         </div>
+        
         <div className="filter-tabs">
           <button 
             className={`filter-tab ${activeFilter === 'all' ? 'active' : ''}`}
@@ -133,10 +166,16 @@ function Campaigns() {
             All
           </button>
           <button 
-            className={`filter-tab ${activeFilter === 'sent' ? 'active' : ''}`}
-            onClick={() => handleFilterChange('sent')}
+            className={`filter-tab ${activeFilter === 'completed' ? 'active' : ''}`}
+            onClick={() => handleFilterChange('completed')}
           >
-            Sent
+            Completed
+          </button>
+          <button 
+            className={`filter-tab ${activeFilter === 'sending' ? 'active' : ''}`}
+            onClick={() => handleFilterChange('sending')}
+          >
+            Sending
           </button>
           <button 
             className={`filter-tab ${activeFilter === 'scheduled' ? 'active' : ''}`}
@@ -157,88 +196,142 @@ function Campaigns() {
             Failed
           </button>
         </div>
-        <button className="btn-secondary filter-button">
-          <Filter size={16} />
-          <span>Filter</span>
-        </button>
       </div>
 
-      <div className="campaigns-grid">
-        {filteredCampaigns.map((campaign) => (
-          <div key={campaign.id} className="campaign-card card">
-            <div className="campaign-header">
-              <div className={`campaign-status ${getStatusClass(campaign.status)}`}>
-                {campaign.status.charAt(0).toUpperCase() + campaign.status.slice(1)}
-              </div>
-            </div>
-            <h3 className="campaign-name">{campaign.name}</h3>
-            <div className="campaign-info">
-              <div className="info-item">
-                <span className="info-label">Template:</span>
-                <span className="info-value">{campaign.template}</span>
-              </div>
-              <div className="info-item">
-                <span className="info-label">Recipients:</span>
-                <span className="info-value">{campaign.recipients.toLocaleString()}</span>
-              </div>
-              {campaign.status !== 'draft' && (
-                <>
-                  <div className="info-item">
-                    <span className="info-label">Delivered:</span>
-                    <span className="info-value">
-                      {campaign.delivered.toLocaleString()} 
-                      {campaign.recipients > 0 ? ` (${Math.round(campaign.delivered / campaign.recipients * 100)}%)` : ''}
-                    </span>
-                  </div>
-                  <div className="info-item">
-                    <span className="info-label">Read:</span>
-                    <span className="info-value">
-                      {campaign.read.toLocaleString()}
-                      {campaign.delivered > 0 ? ` (${Math.round(campaign.read / campaign.delivered * 100)}%)` : ''}
-                    </span>
-                  </div>
-                </>
-              )}
-            </div>
-            
-            {(campaign.status === 'sent' || campaign.status === 'scheduled' || campaign.status === 'failed') && (
-              <div className="campaign-timing">
-                <div className="timing-item">
-                  <Calendar size={14} />
-                  <span>{campaign.date}</span>
+      {isLoading ? (
+        <div className="loading-state">
+          <div className="spinner"></div>
+          <p>Loading campaigns...</p>
+        </div>
+      ) : filteredCampaigns.length === 0 ? (
+        <div className="empty-state">
+          <AlertCircle size={48} />
+          <h3>No campaigns found</h3>
+          <p>Try adjusting your search or filter settings</p>
+        </div>
+      ) : (
+        <div className="campaigns-grid">
+          {filteredCampaigns.map((campaign) => (
+            <div key={campaign.id} className="campaign-card card">
+              <div className="campaign-header">
+                <div className={`campaign-status ${getStatusClass(campaign.status)}`}>
+                  {campaign.status.charAt(0).toUpperCase() + campaign.status.slice(1)}
                 </div>
-                <div className="timing-item">
-                  <Clock size={14} />
-                  <span>{campaign.time}</span>
+                <div className="campaign-date">
+                  {formatDate(campaign.scheduled_at || campaign.created_at)}
                 </div>
               </div>
-            )}
-            
-            <div className="campaign-actions">
-              <div className="action-buttons">
-                <button className="action-btn view-btn" title="View Campaign">
+              
+              <h3 className="campaign-name">{campaign.name}</h3>
+              
+              <div className="campaign-info">
+                <div className="info-item">
+                  <span className="info-label">Template:</span>
+                  <span className="info-value">{campaign.template_name}</span>
+                </div>
+                
+                <div className="info-item">
+                  <span className="info-label">Recipients:</span>
+                  <span className="info-value">
+                    {campaign.recipient_count?.toLocaleString() || '0'}
+                  </span>
+                </div>
+                
+                {(campaign.status === 'completed' || campaign.status === 'sending' || campaign.status === 'partial') && (
+                  <>
+                    <div className="info-item">
+                      <span className="info-label">Delivered:</span>
+                      <span className="info-value">
+                        {campaign.delivered_count?.toLocaleString() || '0'}
+                        {campaign.recipient_count > 0 && (
+                          <span className="percentage">
+                            ({calculatePercentage(campaign.delivered_count, campaign.recipient_count)})
+                          </span>
+                        )}
+                      </span>
+                    </div>
+                    
+                    <div className="info-item">
+                      <span className="info-label">Read:</span>
+                      <span className="info-value">
+                        {campaign.read_count?.toLocaleString() || '0'}
+                        {campaign.delivered_count > 0 && (
+                          <span className="percentage">
+                            ({calculatePercentage(campaign.read_count, campaign.delivered_count)})
+                          </span>
+                        )}
+                      </span>
+                    </div>
+                  </>
+                )}
+              </div>
+              
+              <div className="campaign-actions">
+                <button 
+                  className="btn-secondary"
+                  onClick={() => navigate(`/campaigns/${campaign.id}`)}
+                >
                   <Eye size={16} />
+                  <span>View Details</span>
                 </button>
-                {campaign.status === 'scheduled' && (
-                  <button className="action-btn play-btn" title="Send Now">
-                    <Play size={16} />
-                  </button>
-                )}
-                {campaign.status === 'draft' && (
-                  <button className="action-btn edit-btn" title="Edit Campaign">
-                    <Edit size={16} />
-                  </button>
-                )}
-                {(campaign.status === 'draft' || campaign.status === 'scheduled') && (
-                  <button className="action-btn delete-btn" title="Delete Campaign">
-                    <Trash size={16} />
-                  </button>
-                )}
+                
+                <div className="action-buttons">
+                  {campaign.status === 'scheduled' && (
+                    <button 
+                      className="action-btn play-btn"
+                      title="Send Now"
+                      onClick={() => navigate(`/campaigns/${campaign.id}/send`)}
+                    >
+                      <Play size={16} />
+                    </button>
+                  )}
+                  
+                  {campaign.status === 'draft' && (
+                    <button 
+                      className="action-btn edit-btn"
+                      title="Edit Campaign"
+                      onClick={() => navigate(`/campaigns/${campaign.id}/edit`)}
+                    >
+                      <Edit size={16} />
+                    </button>
+                  )}
+                  
+                  {(campaign.status === 'draft' || campaign.status === 'scheduled') && (
+                    <button 
+                      className="action-btn delete-btn"
+                      title="Delete Campaign"
+                      onClick={() => confirmDelete(campaign.id)}
+                    >
+                      <Trash size={16} />
+                    </button>
+                  )}
+                </div>
               </div>
+            </div>
+          ))}
+        </div>
+      )}
+      
+      {deleteConfirm && (
+        <div className="modal-overlay">
+          <div className="modal-content">
+            <h3>Delete Campaign?</h3>
+            <p>Are you sure you want to delete this campaign? This action cannot be undone.</p>
+            <div className="modal-actions">
+              <button className="btn btn-secondary" onClick={cancelDelete}>
+                Cancel
+              </button>
+              <button 
+                className="btn btn-danger" 
+                onClick={deleteCampaign}
+                disabled={isLoading}
+              >
+                {isLoading ? 'Deleting...' : 'Confirm Delete'}
+              </button>
             </div>
           </div>
-        ))}
-      </div>
+        </div>
+      )}
     </div>
   );
 }

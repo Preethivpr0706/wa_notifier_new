@@ -112,5 +112,7 @@ CREATE TABLE whatsapp_templates.contacts (
 );
 
 
-
 alter table whatsapp_templates.templates modify column header_type ENUM('text', 'image', 'video','none') NOT NULL;
+
+ALTER TABLE whatsapp_templates.campaigns 
+MODIFY COLUMN status VARCHAR(50) NOT NULL DEFAULT 'draft';

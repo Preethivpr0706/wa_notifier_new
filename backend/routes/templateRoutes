@@ -36,4 +36,7 @@ router.post('/media/upload/:sessionId', upload.single('file'), uploadFile);
 
 // Add this route with the others
 router.get('/:id/check-status', TemplateController.checkTemplateStatus);
+
+// routes/templateRoutes.js
+router.post('/upload-media', upload.single('file'), TemplateController.uploadMedia);
 module.exports = router;

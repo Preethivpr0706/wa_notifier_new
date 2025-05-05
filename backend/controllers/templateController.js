@@ -494,52 +494,88 @@ class TemplateController {
     }
 
     static async checkTemplateStatus(req, res) {
-        try {
-            const userId = 1; // Should come from auth
-            const templateId = req.params.id;
+            try {
+                const userId = 1; // Should come from auth
+                const templateId = req.params.id;
 
-            // Get the template from our database
-            const template = await Template.getById(templateId, userId);
-            if (!template) {
-                return res.status(404).json({
-                    success: false,
-                    message: 'Template not found'
-                });
-            }
+                // Get the template from our database
+                const template = await Template.getById(templateId, userId);
+                if (!template) {
+                    return res.status(404).json({
+                        success: false,
+                        message: 'Template not found'
+                    });
+                }
 
-            // Only check status for pending templates with WhatsApp ID
-            if (template.status === 'pending' && template.whatsapp_id) {
-                const statusUpdate = await WhatsAppService.checkAndUpdateTemplateStatus(template);
+                // Only check status for pending templates with WhatsApp ID
+                if (template.status === 'pending' && template.whatsapp_id) {
+                    const statusUpdate = await WhatsAppService.checkAndUpdateTemplateStatus(template);
 
-                // Update our database with the new status
-                const updatedTemplate = await Template.updateStatus(
-                    templateId,
-                    statusUpdate.status, {
-                        whatsapp_status: statusUpdate.whatsappStatus,
-                        quality_score: statusUpdate.qualityScore,
-                        rejection_reason: statusUpdate.rejectionReason,
-                        user_id: userId
-                    }
-                );
+                    // Update our database with the new status
+                    const updatedTemplate = await Template.updateStatus(
+                        templateId,
+                        statusUpdate.status, {
+                            whatsapp_status: statusUpdate.whatsappStatus,
+                            quality_score: statusUpdate.qualityScore,
+                            rejection_reason: statusUpdate.rejectionReason,
+                            user_id: userId
+                        }
+                    );
 
+                    return res.status(200).json({
+                        success: true,
+                        message: 'Template status checked and updated',
+                        data: { template: updatedTemplate }
+                    });
+                }
+
+                // For non-pending templates or those without WhatsApp ID
                 return res.status(200).json({
                     success: true,
-                    message: 'Template status checked and updated',
-                    data: { template: updatedTemplate }
+                    message: 'No status check needed',
+                    data: { template }
+                });
+            } catch (error) {
+                console.error('Error checking template status:', error);
+                res.status(500).json({
+                    success: false,
+                    message: 'Failed to check template status',
+                    error: error.message
+                });
+            }
+        }
+        // controllers/TemplateController.js
+    static async uploadMedia(req, res) {
+        try {
+            const { templateId, headerType } = req.body;
+            const file = req.file;
+
+            if (!file) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'No file uploaded'
                 });
             }
 
-            // For non-pending templates or those without WhatsApp ID
-            return res.status(200).json({
+            // Upload to WhatsApp and get the media ID
+            const whatsappMediaId = await WhatsAppService.uploadMediaToWhatsApp(
+                file.buffer,
+                file.mimetype
+            );
+
+            // You might want to store this media ID in your database
+            // associated with the template for future use
+            await Template.updateMediaId(templateId, whatsappMediaId);
+
+            res.json({
                 success: true,
-                message: 'No status check needed',
-                data: { template }
+                whatsappMediaId
             });
         } catch (error) {
-            console.error('Error checking template status:', error);
+            console.error('Media upload error:', error);
             res.status(500).json({
                 success: false,
-                message: 'Failed to check template status',
+                message: 'Failed to upload media',
                 error: error.message
             });
         }

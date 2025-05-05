@@ -357,6 +357,18 @@ class ContactController {
             res.status(500).json({ success: false, message: 'Failed to delete contact' });
         }
     }
+    static async getAllByUser(userId) {
+        const [contacts] = await pool.execute(
+            `SELECT 
+                c.id, c.fname, c.lname, c.wanumber, c.email, 
+                c.list_id as listId, l.name as list_name
+            FROM contacts c
+            JOIN contact_lists l ON c.list_id = l.id
+            WHERE l.user_id = ?
+            ORDER BY c.created_at DESC`, [userId]
+        );
+        return contacts;
+    }
 }
 
 module.exports = ContactController;

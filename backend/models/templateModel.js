@@ -326,6 +326,103 @@ static async updateStatus(templateId, status, additionalData = {}) {
       connection.release();
     }
   }
+  // In models/templateModel.js
+  static async getByIdForSending(templateId, userId) {
+    // First get the basic template data using the existing method
+    const template = await this.getById(templateId, userId);
+    if (!template) return null;
+
+    // Handle variables - they might be a string or already an object
+    let variables = {};
+    if (template.variables) {
+        try {
+            variables = typeof template.variables === 'string' 
+                ? JSON.parse(template.variables) 
+                : template.variables;
+        } catch (e) {
+            console.error('Error parsing template variables:', e);
+            variables = {};
+        }
+    }
+
+    // Build the components array that WhatsApp expects
+    const components = [];
+    
+    // Header component
+    if (template.header_type && template.header_content) {
+        components.push({
+            type: 'HEADER',
+            format: template.header_type.toUpperCase(),
+            text: template.header_type === 'text' ? template.header_content : undefined,
+            example: template.header_type !== 'text' ? {
+                header_handle: [template.header_content]
+            } : undefined
+        });
+    }
+    
+    // Body component
+    if (template.body_text) {
+        components.push({
+            type: 'BODY',
+            text: template.body_text,
+            example: Object.keys(variables).length > 0 ? {
+                body_text: [Object.values(variables)]
+            } : undefined
+        });
+    }
+    
+    // Footer component
+    if (template.footer_text) {
+        components.push({
+            type: 'FOOTER',
+            text: template.footer_text
+        });
+    }
+    
+    // Buttons component
+    if (template.buttons && template.buttons.length > 0) {
+        components.push({
+            type: 'BUTTONS',
+            buttons: template.buttons.map(button => ({
+                type: button.type.toUpperCase(),
+                text: button.text,
+                ...(button.type === 'phone_number' && { phone_number: button.value }),
+                ...(button.type === 'url' && { url: button.value })
+            }))
+        });
+    }
+
+    return {
+        ...template,
+        components,
+        whatsapp_id: template.whatsapp_id || template.whatsappId,
+        variables
+    };
+}
+// In templateModel.js
+// models/templateModel.js
+static async updateMediaId(templateId, mediaId) {
+    const connection = await pool.getConnection();
+    try {
+        await connection.beginTransaction();
+
+        const [result] = await connection.execute(
+            `UPDATE templates 
+             SET header_content = ?, 
+                 updated_at = CURRENT_TIMESTAMP
+             WHERE id = ?`,
+            [mediaId, templateId]
+        );
+
+        await connection.commit();
+        return result.affectedRows > 0;
+    } catch (error) {
+        await connection.rollback();
+        throw error;
+    } finally {
+        connection.release();
+    }
+}
 }
 
 module.exports = Template;

@@ -1,66 +1,134 @@
-import { useState } from 'react';
-import { Users, FileText, BarChart3, Send } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { FileText, Users, Image, Video, Upload, BarChart3, Send, ChevronRight } from 'lucide-react';
+import FieldMapper from './FieldMapper';
+import { templateService } from '../../api/templateService';
+import { getContacts } from '../../api/contactService';
+import { messageService } from '../../api/messageService';
+import MediaUploadModal from './MediaUploadModal';
 import './SendMessage.css';
 
 function SendMessage() {
+  const navigate = useNavigate();
+  const [step, setStep] = useState(1);
+  const [templates, setTemplates] = useState([]);
+  const [contacts, setContacts] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [showMediaUpload, setShowMediaUpload] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [selectedMedia, setSelectedMedia] = useState(null);
+
   const [formData, setFormData] = useState({
-    template: '',
+    templateId: '',
     audienceType: 'all',
     customAudience: '',
     scheduledTime: '',
     scheduledDate: '',
-    sendNow: true
+    sendNow: true,
+    fieldMappings: {}
   });
-  
-  const templates = [
-    { id: 1, name: 'Welcome Message', category: 'utility' },
-    { id: 2, name: 'Order Confirmation', category: 'utility' },
-    { id: 3, name: 'Special Offer', category: 'marketing' },
-    { id: 4, name: 'Event Reminder', category: 'marketing' },
-    { id: 5, name: 'Verification Code', category: 'authentication' }
-  ];
-  
-  const audiences = [
-    { id: 'all', name: 'All Contacts', count: 15000 },
-    { id: 'active', name: 'Active Users', count: 8500 },
-    { id: 'inactive', name: 'Inactive Users', count: 6500 },
-    { id: 'new', name: 'New Users (Last 30 days)', count: 2200 }
-  ];
-  
+
+  // Fetch templates and contacts
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        setIsLoading(true);
+        const [templatesRes, contactsRes] = await Promise.all([
+          templateService.getTemplates({ status: 'approved' }),
+          getContacts()
+        ]);
+        
+        setTemplates(templatesRes.data?.templates || []);
+        setContacts(contactsRes.data || []);
+      } catch (err) {
+        setError('Failed to load data: ' + (err.response?.data?.message || err.message));
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    
+    fetchData();
+  }, []);
+
   const handleInputChange = (e) => {
     const { name, value, type, checked } = e.target;
     
-    if (type === 'checkbox') {
-      setFormData({
-        ...formData,
-        [name]: checked
-      });
-    } else {
-      setFormData({
-        ...formData,
-        [name]: value
-      });
-    }
+    setFormData(prev => ({
+      ...prev,
+      [name]: type === 'checkbox' ? checked : value
+    }));
+  };
+
+  const handleMappingChange = (mappings) => {
+    setFormData(prev => ({
+      ...prev,
+      fieldMappings: mappings
+    }));
+  };
+
+  // In the handleMediaUpload function
+// In the handleMediaUpload function
+const handleMediaUpload = async (file) => {
+  try {
+    setIsLoading(true);
+    setUploadProgress(0);
     
-    // If sendNow is checked, clear scheduled date and time
-    if (name === 'sendNow' && checked) {
-      setFormData(prev => ({
-        ...prev,
-        scheduledDate: '',
-        scheduledTime: ''
-      }));
+    // Use templateService instead of direct axios call
+    const response = await templateService.uploadMediaToWhatsApp(
+      file,
+      formData.templateId,
+      selectedTemplate.header_type
+    );
+
+    setSelectedMedia({
+      id: response.whatsappMediaId,
+      type: file.type.startsWith('image') ? 'image' : 'video',
+      name: file.name
+    });
+    
+    setShowMediaUpload(false);
+  } catch (err) {
+    setError('Failed to upload media: ' + (err.response?.data?.message || err.message));
+  } finally {
+    setIsLoading(false);
+    setUploadProgress(0);
+  }
+};
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    
+    try {
+      setIsLoading(true);
+      
+      // Prepare payload
+      const payload = {
+        templateId: formData.templateId,
+        audienceType: formData.audienceType,
+        contacts: formData.audienceType === 'custom' ? formData.customAudience : undefined,
+        fieldMappings: formData.fieldMappings,
+        sendNow: formData.sendNow,
+        scheduledAt: formData.sendNow ? undefined : 
+          `${formData.scheduledDate}T${formData.scheduledTime}:00Z`
+      };
+      
+      // Call API to send messages
+      const response = await messageService.sendBulkMessages(payload);
+      
+      // Navigate to campaigns page
+      navigate('/campaigns', { 
+        state: { success: 'Messages sent successfully!' } 
+      });
+    } catch (err) {
+      setError('Failed to send messages: ' + (err.response?.data?.message || err.message));
+    } finally {
+      setIsLoading(false);
     }
   };
-  
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    // Handle form submission logic
-    console.log('Send Message Form Data:', formData);
-  };
-  
-  const selectedTemplate = templates.find(t => t.id === parseInt(formData.template, 10));
-  const selectedAudience = audiences.find(a => a.id === formData.audienceType);
-  const audienceCount = selectedAudience ? selectedAudience.count : 0;
+
+  const selectedTemplate = templates.find(t => t.id === formData.templateId);
+  const contactFields = contacts.length > 0 ? Object.keys(contacts[0]) : [];
 
   return (
     <div className="send-message">
@@ -68,206 +136,321 @@ function SendMessage() {
         <h2>Send Message</h2>
       </div>
       
-      <div className="send-message-container">
-        <div className="send-form card">
-          <form onSubmit={handleSubmit}>
-            <div className="form-section">
-              <h3 className="section-title">
-                <FileText size={18} />
-                <span>Select Template</span>
-              </h3>
-              <div className="form-field">
-                <label htmlFor="template">Message Template</label>
-                <select
-                  id="template"
-                  name="template"
-                  value={formData.template}
-                  onChange={handleInputChange}
-                  required
-                >
-                  <option value="">Select a template</option>
-                  {templates.map(template => (
-                    <option key={template.id} value={template.id}>
-                      {template.name} ({template.category})
-                    </option>
-                  ))}
-                </select>
-              </div>
-              
-              {selectedTemplate && (
-                <div className="template-preview-small">
-                  <h4>Template Preview</h4>
-                  <div className="template-info">
-                    <span className="template-name">{selectedTemplate.name}</span>
-                    <span className="template-category">{selectedTemplate.category}</span>
-                  </div>
-                  <a href={`/templates/${selectedTemplate.id}`} className="btn-secondary">
-                    View Full Template
-                  </a>
-                </div>
-              )}
+      {/* Progress steps... */}
+      <div className="progress-steps">
+        <div className={`step ${step >= 1 ? 'active' : ''}`}>
+          <span>1. Select Template</span>
+        </div>
+        <ChevronRight size={20} />
+        <div className={`step ${step >= 2 ? 'active' : ''}`}>
+          <span>2. Select Audience</span>
+        </div>
+        <ChevronRight size={20} />
+        <div className={`step ${step >= 3 ? 'active' : ''}`}>
+          <span>3. Map Fields</span>
+        </div>
+        <ChevronRight size={20} />
+        <div className={`step ${step >= 4 ? 'active' : ''}`}>
+          <span>4. Send</span>
+        </div>
+      </div>
+      
+      {error && <div className="error-alert">{error}</div>}
+      
+      <form onSubmit={handleSubmit}>
+        {/* Step 1: Template Selection */}
+        {step === 1 && (
+          <div className="form-step card">
+            <h3 className="section-title">
+              <FileText size={18} />
+              <span>Select Template</span>
+            </h3>
+            
+            <div className="form-field">
+              <label htmlFor="templateId">Message Template</label>
+              <select
+                id="templateId"
+                name="templateId"
+                value={formData.templateId}
+                onChange={handleInputChange}
+                required
+              >
+                <option value="">Select a template</option>
+                {templates.map(template => (
+                  <option key={template.id} value={template.id}>
+                    {template.name} ({template.category})
+                  </option>
+                ))}
+              </select>
             </div>
             
-            <div className="form-section">
-              <h3 className="section-title">
-                <Users size={18} />
-                <span>Select Audience</span>
-              </h3>
-              <div className="audience-options">
-                {audiences.map(audience => (
-                  <div key={audience.id} className="audience-option">
-                    <input
-                      type="radio"
-                      id={`audience-${audience.id}`}
-                      name="audienceType"
-                      value={audience.id}
-                      checked={formData.audienceType === audience.id}
-                      onChange={handleInputChange}
-                    />
-                    <label htmlFor={`audience-${audience.id}`} className="audience-label">
-                      <div className="audience-info">
-                        <span className="audience-name">{audience.name}</span>
-                        <span className="audience-count">{audience.count.toLocaleString()} contacts</span>
-                      </div>
-                    </label>
+            {selectedTemplate && (
+              <div className="template-preview">
+                <h4>Template Preview</h4>
+                <div className="template-content">
+                  {selectedTemplate.header_type && selectedTemplate.header_content && (
+                    <div className={`template-header ${selectedTemplate.header_type}`}>
+                      {selectedTemplate.header_type === 'text' ? (
+                        selectedTemplate.header_content
+                      ) : (
+                        <div className="media-preview">
+                          {selectedTemplate.header_type === 'image' ? (
+                            <Image size={48} />
+                          ) : (
+                            <Video size={48} />
+                          )}
+                          <span>Media Attachment</span>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  <div className="template-body">
+                    {selectedTemplate.body_text}
                   </div>
-                ))}
+                  {selectedTemplate.footer_text && (
+                    <div className="template-footer">
+                      {selectedTemplate.footer_text}
+                    </div>
+                  )}
+                </div>
                 
-                <div className="audience-option">
+                {/* Media upload button for media headers */}
+                {selectedTemplate.header_type && 
+                 ['image', 'video'].includes(selectedTemplate.header_type) && (
+                  <div className="media-upload-section">
+                    <button
+                      type="button"
+                      className="btn btn-secondary"
+                      onClick={() => setShowMediaUpload(true)}
+                    >
+                      <Upload size={16} />
+                      <span>Upload {selectedTemplate.header_type}</span>
+                    </button>
+                    
+                    {selectedMedia && (
+                      <div className="media-info">
+                        <span>{selectedMedia.name}</span>
+                        <span className="media-id">ID: {selectedMedia.id}</span>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+            
+            <div className="step-actions">
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={() => setStep(2)}
+                disabled={!formData.templateId}
+              >
+                Next
+              </button>
+            </div>
+          </div>
+        )}
+        
+         {/* Step 2: Audience Selection */}
+         {step === 2 && (
+          <div className="form-step card">
+            <h3 className="section-title">
+              <Users size={18} />
+              <span>Select Audience</span>
+            </h3>
+            
+            <div className="form-field">
+              <label>Audience Type</label>
+              <div className="radio-group">
+                <label>
                   <input
                     type="radio"
-                    id="audience-custom"
+                    name="audienceType"
+                    value="all"
+                    checked={formData.audienceType === 'all'}
+                    onChange={handleInputChange}
+                  />
+                  All Contacts ({contacts.length})
+                </label>
+                
+                <label>
+                  <input
+                    type="radio"
                     name="audienceType"
                     value="custom"
                     checked={formData.audienceType === 'custom'}
                     onChange={handleInputChange}
                   />
-                  <label htmlFor="audience-custom" className="audience-label">
-                    <div className="audience-info">
-                      <span className="audience-name">Custom Audience</span>
-                      <span className="audience-count">Upload a CSV file</span>
-                    </div>
-                  </label>
-                </div>
-              </div>
-              
-              {formData.audienceType === 'custom' && (
-                <div className="form-field">
-                  <label htmlFor="customAudience">Upload CSV File</label>
-                  <input
-                    type="file"
-                    id="customAudience"
-                    name="customAudience"
-                    accept=".csv"
-                    onChange={handleInputChange}
-                  />
-                  <p className="field-helper">Upload a CSV file with phone numbers in international format</p>
-                </div>
-              )}
-            </div>
-            
-            <div className="form-section">
-              <h3 className="section-title">
-                <BarChart3 size={18} />
-                <span>Delivery Options</span>
-              </h3>
-              <div className="delivery-options">
-                <div className="form-field checkbox-field">
-                  <input
-                    type="checkbox"
-                    id="sendNow"
-                    name="sendNow"
-                    checked={formData.sendNow}
-                    onChange={handleInputChange}
-                  />
-                  <label htmlFor="sendNow">Send immediately</label>
-                </div>
-                
-                {!formData.sendNow && (
-                  <div className="scheduled-fields">
-                    <div className="form-row">
-                      <div className="form-field">
-                        <label htmlFor="scheduledDate">Date</label>
-                        <input
-                          type="date"
-                          id="scheduledDate"
-                          name="scheduledDate"
-                          value={formData.scheduledDate}
-                          onChange={handleInputChange}
-                          min={new Date().toISOString().split('T')[0]}
-                          required={!formData.sendNow}
-                        />
-                      </div>
-                      
-                      <div className="form-field">
-                        <label htmlFor="scheduledTime">Time</label>
-                        <input
-                          type="time"
-                          id="scheduledTime"
-                          name="scheduledTime"
-                          value={formData.scheduledTime}
-                          onChange={handleInputChange}
-                          required={!formData.sendNow}
-                        />
-                      </div>
-                    </div>
-                  </div>
-                )}
+                  Custom List
+                </label>
               </div>
             </div>
             
-            <div className="form-actions">
-              <button type="submit" className="btn btn-primary send-button">
-                <Send size={16} />
-                <span>{formData.sendNow ? 'Send Now' : 'Schedule Message'}</span>
+            {formData.audienceType === 'custom' && (
+              <div className="form-field">
+                <label htmlFor="customAudience">Upload CSV File</label>
+                <input
+                  type="file"
+                  id="customAudience"
+                  name="customAudience"
+                  accept=".csv"
+                  onChange={handleInputChange}
+                />
+              </div>
+            )}
+            
+            <div className="step-actions">
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={() => setStep(1)}
+              >
+                Back
+              </button>
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={() => setStep(3)}
+              >
+                Next
               </button>
             </div>
-          </form>
-        </div>
+          </div>
+        )}
         
-        <div className="send-summary card">
-          <h3>Message Summary</h3>
-          
-          <div className="summary-section">
-            <h4>Template</h4>
-            <p>{selectedTemplate ? selectedTemplate.name : 'None selected'}</p>
-          </div>
-          
-          <div className="summary-section">
-            <h4>Audience</h4>
-            <p>{selectedAudience ? selectedAudience.name : 'None selected'}</p>
-            <p className="audience-count-large">{audienceCount.toLocaleString()} recipients</p>
-          </div>
-          
-          <div className="summary-section">
-            <h4>Delivery</h4>
-            <p>{formData.sendNow ? 'Immediate delivery' : 'Scheduled delivery'}</p>
-            {!formData.sendNow && formData.scheduledDate && formData.scheduledTime && (
-              <p>{formData.scheduledDate} at {formData.scheduledTime}</p>
-            )}
-          </div>
-          
-          <div className="cost-estimate">
-            <h4>Estimated Cost</h4>
-            <div className="cost-breakdown">
-              <div className="cost-item">
-                <span>Message rate</span>
-                <span>$0.005 per message</span>
-              </div>
-              <div className="cost-item">
-                <span>Recipients</span>
-                <span>{audienceCount.toLocaleString()}</span>
-              </div>
-              <div className="cost-total">
-                <span>Total cost</span>
-                <span>${(audienceCount * 0.005).toFixed(2)}</span>
-              </div>
+        {/* Step 3: Field Mapping */}
+        {step === 3 && selectedTemplate && (
+          <div className="form-step card">
+            <h3 className="section-title">
+              <span>Map Template Variables</span>
+            </h3>
+            
+            <FieldMapper
+              templateVariables={extractVariables(selectedTemplate.body_text)}
+              contactFields={contactFields}
+              onMappingChange={handleMappingChange}
+            />
+            
+            <div className="step-actions">
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={() => setStep(2)}
+              >
+                Back
+              </button>
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={() => setStep(4)}
+              >
+                Next
+              </button>
             </div>
           </div>
-        </div>
-      </div>
+        )}
+        
+        {/* Step 4: Send Options */}
+        {step === 4 && (
+          <div className="form-step card">
+            <h3 className="section-title">
+              <BarChart3 size={18} />
+              <span>Delivery Options</span>
+            </h3>
+            
+            <div className="form-field checkbox-field">
+              <label>
+                <input
+                  type="checkbox"
+                  name="sendNow"
+                  checked={formData.sendNow}
+                  onChange={handleInputChange}
+                />
+                Send immediately
+              </label>
+            </div>
+            
+            {!formData.sendNow && (
+              <div className="form-row">
+                <div className="form-field">
+                  <label htmlFor="scheduledDate">Date</label>
+                  <input
+                    type="date"
+                    id="scheduledDate"
+                    name="scheduledDate"
+                    value={formData.scheduledDate}
+                    onChange={handleInputChange}
+                    min={new Date().toISOString().split('T')[0]}
+                    required={!formData.sendNow}
+                  />
+                </div>
+                
+                <div className="form-field">
+                  <label htmlFor="scheduledTime">Time</label>
+                  <input
+                    type="time"
+                    id="scheduledTime"
+                    name="scheduledTime"
+                    value={formData.scheduledTime}
+                    onChange={handleInputChange}
+                    required={!formData.sendNow}
+                  />
+                </div>
+              </div>
+            )}
+            
+            <div className="summary-section">
+              <h4>Summary</h4>
+              <p><strong>Template:</strong> {selectedTemplate?.name}</p>
+              <p><strong>Audience:</strong> {formData.audienceType === 'all' ? 
+                `All Contacts (${contacts.length})` : 'Custom List'}</p>
+              <p><strong>Delivery:</strong> {formData.sendNow ? 
+                'Immediate' : 'Scheduled'}</p>
+            </div>
+            
+            <div className="step-actions">
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={() => setStep(3)}
+              >
+                Back
+              </button>
+              <button
+                type="submit"
+                className="btn btn-primary"
+                disabled={isLoading}
+              >
+                {isLoading ? 'Sending...' : 'Send Messages'}
+              </button>
+            </div>
+          </div>
+        )}
+      </form>
+      
+      {/* Media Upload Modal */}
+      <MediaUploadModal
+        isOpen={showMediaUpload}
+        onClose={() => setShowMediaUpload(false)}
+        onUpload={handleMediaUpload}
+        fileType={selectedTemplate?.header_type}
+        progress={uploadProgress}
+      />
     </div>
   );
+}
+
+ 
+// Helper function to extract variables from template text
+function extractVariables(text) {
+  if (!text) return [];
+  const regex = /\{\{([^}]+)\}\}/g;
+  const matches = [];
+  let match;
+  while (match = regex.exec(text)) {
+    matches.push(match[1]);
+  }
+  return [...new Set(matches)]; // Return unique variables
 }
 
 export default SendMessage;
