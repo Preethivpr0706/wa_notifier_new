@@ -19,25 +19,30 @@ function Campaigns() {
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   // Fetch campaigns
-  const fetchCampaigns = async () => {
-    try {
-      setIsLoading(true);
-      setError(null);
-      
-      const filters = {};
-      if (activeFilter !== 'all') {
-        filters.status = activeFilter;
-      }
-      
-      const response = await campaignService.getCampaigns(filters);
-      setCampaigns(response.data?.campaigns || []);
-    } catch (err) {
-      setError('Failed to load campaigns: ' + (err.response?.data?.message || err.message));
-    } finally {
-      setIsLoading(false);
-      setIsRefreshing(false);
+ const fetchCampaigns = async () => {
+  try {
+    console.log('Fetching campaigns...');
+    setIsLoading(true);
+    setError(null);
+    
+    const filters = {};
+    if (activeFilter !== 'all') {
+      filters.status = activeFilter;
     }
-  };
+    
+    const response = await campaignService.getCampaigns(filters);
+    console.log('Campaigns data:', response);
+    
+    // Updated to match backend response structure
+    setCampaigns(response.data || []);
+  } catch (err) {
+    console.error('Error fetching campaigns:', err);
+    setError('Failed to load campaigns: ' + (err.message || 'Unknown error'));
+  } finally {
+    setIsLoading(false);
+    setIsRefreshing(false);
+  }
+};
 
   useEffect(() => {
     fetchCampaigns();
@@ -218,7 +223,7 @@ function Campaigns() {
                   {campaign.status.charAt(0).toUpperCase() + campaign.status.slice(1)}
                 </div>
                 <div className="campaign-date">
-                  {formatDate(campaign.scheduled_at || campaign.created_at)}
+                  {formatDate(campaign.scheduledAt || campaign.createdAt)}
                 </div>
               </div>
               
@@ -227,13 +232,13 @@ function Campaigns() {
               <div className="campaign-info">
                 <div className="info-item">
                   <span className="info-label">Template:</span>
-                  <span className="info-value">{campaign.template_name}</span>
+                  <span className="info-value">{campaign.templateName}</span>
                 </div>
                 
                 <div className="info-item">
                   <span className="info-label">Recipients:</span>
                   <span className="info-value">
-                    {campaign.recipient_count?.toLocaleString() || '0'}
+                    {campaign.recipientCount?.toLocaleString() || '0'}
                   </span>
                 </div>
                 
@@ -242,10 +247,10 @@ function Campaigns() {
                     <div className="info-item">
                       <span className="info-label">Delivered:</span>
                       <span className="info-value">
-                        {campaign.delivered_count?.toLocaleString() || '0'}
-                        {campaign.recipient_count > 0 && (
+                        {campaign.deliveredCount?.toLocaleString() || '0'}
+                        {campaign.recipientCount > 0 && (
                           <span className="percentage">
-                            ({calculatePercentage(campaign.delivered_count, campaign.recipient_count)})
+                            ({calculatePercentage(campaign.deliveredCount, campaign.recipientCount)})
                           </span>
                         )}
                       </span>
@@ -255,9 +260,9 @@ function Campaigns() {
                       <span className="info-label">Read:</span>
                       <span className="info-value">
                         {campaign.read_count?.toLocaleString() || '0'}
-                        {campaign.delivered_count > 0 && (
+                        {campaign.deliveredCount > 0 && (
                           <span className="percentage">
-                            ({calculatePercentage(campaign.read_count, campaign.delivered_count)})
+                            ({calculatePercentage(campaign.readCount, campaign.deliveredCount)})
                           </span>
                         )}
                       </span>

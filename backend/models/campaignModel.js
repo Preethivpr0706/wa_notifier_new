@@ -41,6 +41,8 @@ class Campaign {
 
     // Get all campaigns for a user
     static async getAllByUser(userId, filters = {}) {
+        console.log(`Getting campaigns for user ${userId} with filters:`, filters);
+
         const queryParams = [userId];
         let filterQuery = '';
 

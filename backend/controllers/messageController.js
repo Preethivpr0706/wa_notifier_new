@@ -191,46 +191,7 @@ class MessageController {
         }
     }
 
-    static async processCustomAudience(customAudience) {
-        // Implement your CSV processing logic here
-        // This should return an array of contact objects with at least { wanumber }
-        // Example implementation:
 
-        try {
-            if (!customAudience.buffer) {
-                throw new Error('No file data received');
-            }
-
-            const csvData = customAudience.buffer.toString('utf8');
-            const parsed = await new Promise((resolve, reject) => {
-                Papa.parse(csvData, {
-                    header: true,
-                    skipEmptyLines: true,
-                    complete: (results) => resolve(results),
-                    error: (error) => reject(error)
-                });
-            });
-
-            // Validate required fields
-            if (!parsed.data || parsed.data.length === 0) {
-                throw new Error('CSV file is empty or contains no valid data');
-            }
-
-            if (!parsed.data[0].wanumber) {
-                throw new Error('CSV must contain a wanumber column');
-            }
-
-            // Transform to contact objects
-            return parsed.data.map(row => ({
-                id: row.id || undefined,
-                wanumber: row.wanumber,
-                ...row // Include all other fields for variable replacement
-            }));
-        } catch (error) {
-            console.error('Error processing custom audience:', error);
-            throw new Error(`Failed to process custom audience: ${error.message}`);
-        }
-    }
 
 }
 

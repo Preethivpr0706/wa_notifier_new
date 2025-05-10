@@ -9,6 +9,8 @@ const templateRoutes = require('./routes/templateRoutes');
 const contactRoutes = require('./routes/contactRoutes');
 const messageRoutes = require('./routes/messageRoutes');
 const businessRoutes = require('./routes/businessRoutes');
+const campaignRoutes = require('./routes/campaignRoutes');
+
 
 require('dotenv').config();
 
@@ -30,6 +32,8 @@ app.use('/api/templates', templateRoutes);
 app.use('/api/contacts', contactRoutes);
 
 app.use('/api/messages/', messageRoutes);
+
+app.use('/api/campaigns', campaignRoutes);
 
 app.use('/api/business', businessRoutes);
 // Add this with your other middleware
