@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import ProfileImageUpload from './ProfileImageUpload';
 import { 
   User, 
   Building, 
@@ -14,6 +15,7 @@ import {
   ToggleLeft,
   ToggleRight
 } from 'lucide-react';
+import { businessService } from '../../api/businessService';
 import './Settings.css';
 
 function Settings() {
@@ -26,7 +28,50 @@ function Settings() {
     messaging: false,
     marketing: true
   });
-  
+  const [businessDetails, setBusinessDetails] = useState({
+    name: 'Your Business',
+    profileImage: null
+  });
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    const fetchBusinessDetails = async () => {
+      try {
+        setLoading(true);
+        const response = await businessService.getBusinessDetails();
+        
+        if (response.success) {
+          setBusinessDetails({
+            name: response.data.name || 'Your Business',
+            profileImage: response.data.profile_image_url || null
+          });
+        }
+      } catch (error) {
+        console.error('Failed to fetch business details:', error);
+        setError('Failed to load business details. Using default values.');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchBusinessDetails();
+  }, []);
+
+  if (loading) {
+    return <div>Loading business details...</div>;
+  }
+
+  if (error) {
+    return <div className="error-message">{error}</div>;
+  }
+
+  const handleProfileImageUpdate = (newImageUrl) => {
+    setBusinessDetails(prev => ({
+      ...prev,
+      profileImage: newImageUrl
+    }));
+  };
   const handleTabChange = (tab) => {
     setActiveTab(tab);
   };
@@ -45,15 +90,15 @@ function Settings() {
           <div className="settings-content">
             <h3>Profile Settings</h3>
             <div className="user-profile-section">
-              <div className="user-avatar-large">
-                <User size={40} />
-              </div>
-              <div className="user-details">
-                <h4>John Doe</h4>
-                <p>john.doe@example.com</p>
-                <button className="btn btn-secondary change-avatar-btn">Change Photo</button>
-              </div>
-            </div>
+        <ProfileImageUpload 
+          profileImage={businessDetails.profileImage}
+          onImageUpdate={handleProfileImageUpdate}
+        />
+        <div className="user-details">
+          <h4>{businessDetails.name}</h4>
+          <p>Business Profile</p>
+        </div>
+      </div>
             
             <div className="form-section">
               <h4>Personal Information</h4>

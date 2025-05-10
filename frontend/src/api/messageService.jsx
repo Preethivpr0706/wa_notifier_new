@@ -22,21 +22,21 @@ apiClient.interceptors.request.use((config) => {
 export const messageService = {
   sendBulkMessages: async (payload) => {
     try {
+      console.log('Sending payload:', JSON.stringify(payload, null, 2));
+      
       const response = await apiClient.post('/messages/send-bulk', payload);
+      
+      if (!response.data.success) {
+        throw new Error(response.data.message || 'Failed to send messages');
+      }
+      
       return response.data;
     } catch (error) {
-      throw error.response?.data?.message || error.message;
-    }
-  },
-  
-  createCampaign: async (campaignData) => {
-    try {
-      const response = await apiClient.post('/campaigns', campaignData);
-      return response.data;
-    } catch (error) {
-      throw error.response?.data?.message || error.message;
+      console.error('Error details:', error.response?.data);
+      throw error.response?.data || error;
     }
   }
 };
+
 
 export default messageService;

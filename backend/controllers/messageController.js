@@ -8,24 +8,56 @@ class MessageController {
 
     // In MessageController class
 
+
     static async sendBulkMessages(req, res) {
         try {
             const {
                 templateId,
-                audienceType,
-                customAudience,
+                audience_type,
+                list_id,
+                is_custom,
+                contacts,
                 fieldMappings,
                 sendNow,
                 scheduledAt
             } = req.body;
-
-            const userId = 1;
+            // Add userId at the beginning of the method
+            const userId = 1; // Hardcoded for testing - should come from auth middleware in production
 
             // Validate required fields
             if (!templateId) {
                 return res.status(400).json({
                     success: false,
                     message: 'Template ID is required'
+                });
+            }
+
+            // Normalize audience_type to lowercase
+            const normalizedAudienceType = audience_type ? audience_type.toLowerCase() : null;
+
+            // Validate audience type
+            const validAudienceTypes = ['all', 'list', 'custom'];
+            if (!validAudienceTypes.includes(normalizedAudienceType)) {
+                return res.status(400).json({
+                    success: false,
+                    message: `Invalid audience type. Must be one of: ${validAudienceTypes.join(', ')}`
+                });
+            }
+            // Validate contacts
+            if (!contacts || !Array.isArray(contacts) || contacts.length === 0) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'At least one contact is required'
+                });
+            }
+
+
+            // Validate each contact has a WhatsApp number
+            const invalidContacts = contacts.filter(c => !c.wanumber);
+            if (invalidContacts.length > 0) {
+                return res.status(400).json({
+                    success: false,
+                    message: `${invalidContacts.length} contacts missing WhatsApp numbers`
                 });
             }
 
@@ -45,21 +77,18 @@ class MessageController {
                 });
             }
 
-            // Get contacts based on audience type
-            let contacts = [];
-            if (audienceType === 'all') {
-                const allContacts = await Contact.getAllByUser(userId);
-                contacts = allContacts;
-            } else if (audienceType === 'custom' && customAudience) {
-                contacts = await this.processCustomAudience(customAudience);
-            } else {
-                return res.status(400).json({
-                    success: false,
-                    message: 'Invalid audience type or missing custom audience'
-                });
+            // Get target contacts based on audience type
+            let targetContacts = [];
+
+            if (normalizedAudienceType === 'all') {
+                targetContacts = await Contact.getAllByUser(userId);
+            } else if (normalizedAudienceType === 'list' || normalizedAudienceType === 'custom') {
+                // Use the provided contacts for both list and custom types
+                targetContacts = contacts;
             }
 
-            if (!contacts || contacts.length === 0) {
+
+            if (!targetContacts || targetContacts.length === 0) {
                 return res.status(400).json({
                     success: false,
                     message: 'No contacts found to send messages to'
@@ -76,14 +105,15 @@ class MessageController {
             });
 
             const results = {
+                success: true,
                 total: contacts.length,
-                success: 0,
-                failures: 0,
+                sent: 0,
+                failed: 0,
                 errors: []
             };
 
             // Process each contact
-            for (const contact of contacts) {
+            for (const contact of targetContacts) {
                 try {
                     if (!contact || typeof contact !== 'object' || !contact.wanumber) {
                         throw new Error('Invalid contact format');
@@ -201,6 +231,7 @@ class MessageController {
             throw new Error(`Failed to process custom audience: ${error.message}`);
         }
     }
+
 }
 
 module.exports = MessageController;

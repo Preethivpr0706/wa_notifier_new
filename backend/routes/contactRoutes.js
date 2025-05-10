@@ -18,6 +18,8 @@ const upload = multer({
 // Contact list routes
 router.post('/lists', ContactController.createList);
 router.get('/lists', ContactController.getLists);
+router.get('/sendLists', ContactController.getSendingLists);
+
 
 // Contact routes
 router.post('/', ContactController.createContact);
@@ -28,7 +30,7 @@ router.put('/:id', ContactController.updateContact);
 router.delete('/:id', ContactController.deleteContact);
 router.get('/user-contacts', async(req, res) => {
     try {
-        const contacts = await ContactController.getAllByUser(req.user.id);
+        const contacts = await ContactController.getAllByUser(1); //userid
         res.json({
             success: true,
             data: contacts

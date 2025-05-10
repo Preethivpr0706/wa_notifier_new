@@ -369,6 +369,42 @@ class ContactController {
         );
         return contacts;
     }
+    static async getByList(listId, userId) {
+        const [contacts] = await pool.execute(
+            `SELECT c.id, c.fname, c.lname, c.wanumber, c.email
+           FROM contacts c
+           JOIN contact_lists l ON c.list_id = l.id
+           WHERE l.id = ? AND l.user_id = ?
+           ORDER BY c.created_at DESC`, [listId, userId]
+        );
+        return contacts;
+    }
+    static async getSendingLists(req, res) {
+        try {
+            const userId = 1; // Replace with actual user ID from auth
+
+            const [lists] = await pool.execute(
+                `SELECT cl.id, cl.name, COUNT(c.id) as contactCount 
+       FROM contact_lists cl
+       LEFT JOIN contacts c ON cl.id = c.list_id
+       WHERE cl.user_id = ?
+       GROUP BY cl.id, cl.name
+       ORDER BY cl.created_at DESC`, [userId]
+            );
+
+            res.json({
+                success: true,
+                data: lists
+            });
+        } catch (error) {
+            console.error('Error fetching sending lists:', error);
+            res.status(500).json({
+                success: false,
+                message: 'Failed to fetch contact lists for sending'
+            });
+        }
+    }
 }
+
 
 module.exports = ContactController;

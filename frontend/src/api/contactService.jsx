@@ -30,6 +30,14 @@ export const getLists = async () => {
     }
 };
 
+export const getListsForSending = async () => {
+  try {
+    const response = await axios.get(`${API_URL}/contacts/sendLists`);
+    return response.data;
+  } catch (error) {
+    throw error.response?.data?.message || error.message;
+  }
+};
 
 
 export const importContacts = async (formData) => {

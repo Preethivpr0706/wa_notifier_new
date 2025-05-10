@@ -1,11 +1,14 @@
 // server.js
 const express = require('express');
 const cors = require('cors');
+const path = require('path');
+const fs = require('fs');
 const { testConnection } = require('./config/database');
 const templateRoutes = require('./routes/templateRoutes');
 // Add this with other route imports
 const contactRoutes = require('./routes/contactRoutes');
 const messageRoutes = require('./routes/messageRoutes');
+const businessRoutes = require('./routes/businessRoutes');
 
 require('dotenv').config();
 
@@ -28,6 +31,29 @@ app.use('/api/contacts', contactRoutes);
 
 app.use('/api/messages/', messageRoutes);
 
+app.use('/api/business', businessRoutes);
+// Add this with your other middleware
+app.use('/uploads', express.static(
+    path.join(__dirname, 'public/uploads'), {
+        maxAge: '1y',
+        setHeaders: (res) => {
+            res.set('Cache-Control', 'public, max-age=31536000');
+        }
+    }
+));
+
+// Add route to verify static files
+app.get('/check-uploads', (req, res) => {
+    const testPath = path.join(__dirname, 'public/uploads/business-profile');
+    const exists = fs.existsSync(testPath);
+
+    res.json({
+        uploadsDirectoryExists: exists,
+        absolutePath: testPath,
+        canWrite: exists ? fs.accessSync(testPath, fs.constants.W_OK) : false
+    });
+});
+
 // Root route
 app.get('/', (req, res) => {
     res.send('WhatsApp Templates API is running');
@@ -35,6 +61,20 @@ app.get('/', (req, res) => {
 
 // Error handling middleware
 app.use((err, req, res, next) => {
+    // Handle Multer errors
+    if (err.code === 'LIMIT_FILE_SIZE') {
+        return res.status(413).json({
+            success: false,
+            message: 'File size too large (max 5MB)'
+        });
+    }
+
+    if (err.code === 'LIMIT_FILE_TYPES') {
+        return res.status(415).json({
+            success: false,
+            message: 'Invalid file type (only JPEG, PNG, GIF allowed)'
+        });
+    }
     console.error(err.stack);
     res.status(500).json({
         success: false,

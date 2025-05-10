@@ -597,3 +597,25 @@ input[type="checkbox"] {
         padding: 24px 16px;
     }
 }
+
+.no-variables-message {
+    padding: 2rem;
+    text-align: center;
+}
+
+.info-alert {
+    background-color: #e8f4fd;
+    border: 1px solid #b3e0ff;
+    border-radius: 4px;
+    padding: 1rem;
+    margin: 1rem 0;
+    color: #0066cc;
+}
+
+.info-alert p {
+    margin: 0.5rem 0;
+}
+
+.info-alert p:first-child {
+    font-weight: 500;
+}
