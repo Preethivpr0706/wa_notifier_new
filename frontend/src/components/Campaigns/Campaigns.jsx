@@ -44,10 +44,7 @@ function Campaigns() {
   }
 };
 
-  useEffect(() => {
-    fetchCampaigns();
-  }, [activeFilter]);
-
+ 
   // Handle filter change
   const handleFilterChange = (filter) => {
     setActiveFilter(filter);
@@ -97,19 +94,61 @@ function Campaigns() {
     return matchesSearch;
   });
 
-  // Get status class
-  const getStatusClass = (status) => {
-    const statusClasses = {
-      completed: 'status-completed',
-      sending: 'status-sending',
-      scheduled: 'status-scheduled',
-      draft: 'status-draft',
-      failed: 'status-failed',
-      partial: 'status-partial'
-    };
-    return statusClasses[status] || '';
+  
+useEffect(() => {
+  const fetchData = async () => {
+    try {
+      if (!isSilentRefresh) {
+        setIsLoading(true);
+      }
+      
+      const filters = {};
+      if (activeFilter !== 'all') {
+        filters.status = activeFilter;
+      }
+      
+      const response = await campaignService.getCampaigns(filters);
+      setCampaigns(response.data || []);
+    } catch (err) {
+      if (!isSilentRefresh) {
+        setError('Failed to load campaigns: ' + (err.message || 'Unknown error'));
+      }
+    } finally {
+      if (!isSilentRefresh) {
+        setIsLoading(false);
+        setIsRefreshing(false);
+      }
+    }
   };
 
+  // Initial load
+  let isSilentRefresh = false;
+  fetchData();
+
+  // Set up polling for campaigns that might still update
+  const shouldPoll = ['sending', 'partial', 'completed'].includes(activeFilter);
+  if (shouldPoll) {
+    const interval = setInterval(() => {
+      isSilentRefresh = true;
+      fetchData();
+    }, 30000); // 30 seconds
+
+    return () => clearInterval(interval);
+  }
+  }, [activeFilter]);
+
+  // Get status class
+  const getStatusClass = (status) => {
+  const statusClasses = {
+    completed: 'status-completed',
+    partial: 'status-partial',
+    sending: 'status-sending',
+    scheduled: 'status-scheduled',
+    draft: 'status-draft',
+    failed: 'status-failed'
+  };
+  return statusClasses[status] || '';
+};
   // Format date
   const formatDate = (dateString) => {
     if (!dateString) return 'Not scheduled';
@@ -124,10 +163,11 @@ function Campaigns() {
   };
 
   // Calculate percentages
-  const calculatePercentage = (part, total) => {
-    if (total === 0) return '0%';
-    return `${Math.round((part / total) * 100)}%`;
-  };
+  // In your Campaigns.jsx component, update the calculatePercentage function:
+const calculatePercentage = (part, total) => {
+  if (!part || !total || total === 0) return '0%';
+  return `${Math.round((part / total) * 100)}%`;
+};
 
   return (
     <div className="campaigns">
@@ -176,6 +216,9 @@ function Campaigns() {
           >
             Completed
           </button>
+           <button className={`filter-tab ${activeFilter === 'partial' ? 'active' : ''}`} onClick={() => handleFilterChange('partial')}>
+    Partially Completed
+  </button>
           <button 
             className={`filter-tab ${activeFilter === 'sending' ? 'active' : ''}`}
             onClick={() => handleFilterChange('sending')}
@@ -230,46 +273,57 @@ function Campaigns() {
               <h3 className="campaign-name">{campaign.name}</h3>
               
               <div className="campaign-info">
-                <div className="info-item">
-                  <span className="info-label">Template:</span>
-                  <span className="info-value">{campaign.templateName}</span>
-                </div>
-                
-                <div className="info-item">
-                  <span className="info-label">Recipients:</span>
-                  <span className="info-value">
-                    {campaign.recipientCount?.toLocaleString() || '0'}
-                  </span>
-                </div>
-                
-                {(campaign.status === 'completed' || campaign.status === 'sending' || campaign.status === 'partial') && (
-                  <>
-                    <div className="info-item">
-                      <span className="info-label">Delivered:</span>
-                      <span className="info-value">
-                        {campaign.deliveredCount?.toLocaleString() || '0'}
-                        {campaign.recipientCount > 0 && (
-                          <span className="percentage">
+    <div className="info-item">
+        <span className="info-label">Template:</span>
+        <span className="info-value">{campaign.templateName}</span>
+    </div>
+    
+    <div className="info-item">
+        <span className="info-label">Recipients:</span>
+        <span className="info-value">
+            {campaign.recipientCount?.toLocaleString() || '0'}
+        </span>
+    </div>
+    
+    {(campaign.status === 'completed' || campaign.status === 'sending' || 
+      campaign.status === 'partial' || campaign.status === 'failed') && (
+        <>
+            <div className="info-item">
+                <span className="info-label">Delivered:</span>
+                <span className="info-value">
+                    {campaign.deliveredCount?.toLocaleString() || '0'}
+                    {campaign.recipientCount > 0 && (
+                        <span className="percentage">
                             ({calculatePercentage(campaign.deliveredCount, campaign.recipientCount)})
-                          </span>
-                        )}
-                      </span>
-                    </div>
-                    
-                    <div className="info-item">
-                      <span className="info-label">Read:</span>
-                      <span className="info-value">
-                        {campaign.read_count?.toLocaleString() || '0'}
-                        {campaign.deliveredCount > 0 && (
-                          <span className="percentage">
+                        </span>
+                    )}
+                </span>
+            </div>
+            
+            <div className="info-item">
+  <span className="info-label">Failed:</span>
+  <span className="info-value">
+    {campaign.failedCount?.toLocaleString() || '0'}
+    <span className="percentage">
+      ({calculatePercentage(campaign.failedCount, campaign.recipientCount)})
+    </span>
+  </span>
+</div>
+            
+            <div className="info-item">
+                <span className="info-label">Read:</span>
+                <span className="info-value">
+                    {campaign.readCount?.toLocaleString() || '0'}
+                    {campaign.deliveredCount > 0 && (
+                        <span className="percentage">
                             ({calculatePercentage(campaign.readCount, campaign.deliveredCount)})
-                          </span>
-                        )}
-                      </span>
-                    </div>
-                  </>
-                )}
-              </div>
+                        </span>
+                    )}
+                </span>
+            </div>
+        </>
+    )}
+</div>
               
               <div className="campaign-actions">
                 <button 

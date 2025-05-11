@@ -1,6 +1,14 @@
 const Campaign = require('../models/campaignModel');
 const { pool } = require('../config/database');
 
+function determineCampaignStatus({ recipientCount, deliveredCount, failedCount }) {
+    const totalProcessed = (deliveredCount || 0) + (failedCount || 0);
+
+    if (totalProcessed < recipientCount) return 'sending';
+    if (failedCount === recipientCount) return 'failed';
+    if (deliveredCount === recipientCount) return 'completed';
+    return 'partial';
+}
 class CampaignController {
     // Create a new campaign
     static async createCampaign(req, res) {
@@ -128,14 +136,15 @@ class CampaignController {
                     message: 'Invalid status value'
                 });
             }
+            const [updatedCampaign] = await connection.execute(
+                'SELECT * FROM campaigns WHERE id = ?', [id]
+            );
 
-            const updated = await Campaign.updateStatus(id, status);
-
-            if (!updated) {
-                return res.status(400).json({
-                    success: false,
-                    message: 'Failed to update campaign status'
-                });
+            if (updatedCampaign.length > 0) {
+                const newStatus = determineCampaignStatus(updatedCampaign[0]);
+                await connection.execute(
+                    'UPDATE campaigns SET status = ? WHERE id = ?', [newStatus, id]
+                );
             }
 
             res.json({
@@ -202,7 +211,7 @@ class CampaignController {
     static async deleteCampaign(req, res) {
         try {
             const { id } = req.params;
-            const userId = req.user.id;
+            const userId = 1; //req.user.id;
 
             const deleted = await Campaign.delete(id, userId);
 

@@ -9,5 +9,7 @@ const upload = multer({ storage: multer.memoryStorage() });
 
 router.post('/send-bulk', MessageController.sendBulkMessages);
 //router.post('/send-test', authenticate, MessageController.sendTestMessage);
+router.get('/webhook', MessageController.verifyWebhook);
+router.post('/webhook', MessageController.handleWebhook);
 
 module.exports = router;

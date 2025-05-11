@@ -317,3 +317,13 @@
     border-radius: var(--border-radius-md);
     margin-bottom: 16px;
 }
+
+.status-partial {
+    background-color: #ffc107;
+    color: #000;
+}
+
+.status-failed {
+    background-color: #dc3545;
+    color: #fff;
+}

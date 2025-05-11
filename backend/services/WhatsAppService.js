@@ -658,85 +658,6 @@ static async updateTemplate(whatsappId, template) {
 
 
 // services/WhatsAppService.js
-// Add this method to the WhatsAppService class
-static async sendBulkMessages({ templateId, contacts, fieldMappings, campaignId, userId }) {
-    try {
-        // Validate inputs
-        if (!templateId) throw new Error('Template ID is required');
-        if (!contacts || !Array.isArray(contacts)) {
-            throw new Error('Contacts must be provided as an array');
-        }
-
-        // Get template
-        const template = await Template.getByIdForSending(templateId, userId);
-        if (!template) throw new Error('Template not found');
-        if (!template.whatsapp_id) {
-            throw new Error('Template is not approved on WhatsApp');
-        }
-
-        const results = {
-            total: contacts.length,
-            success: 0,
-            failures: 0,
-            errors: []
-        };
-
-        // Process each contact
-        for (const contact of contacts) {
-            try {
-                // Validate contact
-                if (!contact || typeof contact !== 'object') {
-                    throw new Error('Invalid contact format');
-                }
-                if (!contact.wanumber) {
-                    throw new Error('Contact missing WhatsApp number');
-                }
-
-                 // Prepare message components
-                 const message = {
-                    to: contact.wanumber,
-                    template: template.name,
-                    language: { code: template.language },
-                    bodyParameters: []
-                };
-
-                // Handle header if exists
-                if (template.header_type && template.header_content) {
-                    message.header = {
-                        type: template.header_type,
-                        content: template.header_content
-                    };
-
-                    // For media headers, we need to upload the media to WhatsApp first
-                    if (['image', 'video', 'document'].includes(template.header_type)) {
-                        // Assuming template.header_content contains the file buffer and metadata
-                        // You might need to adjust this based on how you store media files
-                        const whatsappMediaId = await WhatsAppService.uploadMediaToWhatsApp(
-                            template.header_content.fileBuffer,
-                            template.header_content.mimeType
-                        );
-                        message.header.mediaId = whatsappMediaId;
-                    }
-                }
-
-
-                await WhatsAppService.sendTemplateMessage(message);
-                results.success++;
-            } catch (error) {
-                results.failures++;
-                results.errors.push({
-                    contactId: contact?.id || 'unknown',
-                    error: error.message
-                });
-            }
-        }
-        
-        return results;
-    } catch (error) {
-        console.error('Bulk send error:', error);
-        throw error;
-    }
-}
 
 // In WhatsAppService class
 
@@ -814,8 +735,11 @@ static async sendTemplateMessage(messageData) {
                 }
             }
         );
-
-        return response.data;
+// Ensure we return the message ID
+        return {
+            id: response.data?.messages?.[0]?.id,
+            ...response.data
+        };
     } catch (error) {
         console.error('WhatsApp API Error:', error.response?.data || error.message);
         throw new Error(
