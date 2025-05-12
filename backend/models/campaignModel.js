@@ -131,98 +131,123 @@ class Campaign {
 
     // Update campaign statistics
     static async updateStats(campaignId, stats) {
-        const connection = await pool.getConnection();
-        try {
-            await connection.beginTransaction();
+            const connection = await pool.getConnection();
+            try {
+                await connection.beginTransaction();
 
-            // Get current counts first
-            const [current] = await connection.execute(
-                'SELECT recipient_count, delivered_count, failed_count, read_count FROM campaigns WHERE id = ?', [campaignId]
-            );
+                // Get current counts first
+                const [current] = await connection.execute(
+                    'SELECT recipient_count, delivered_count, failed_count, read_count FROM campaigns WHERE id = ?', [campaignId]
+                );
 
-            if (current.length === 0) {
-                throw new Error('Campaign not found');
-            }
+                if (current.length === 0) {
+                    throw new Error('Campaign not found');
+                }
 
-            // Calculate new counts safely - replace undefined with current values or 0
-            const newStats = {
-                recipientCount: stats.recipientCount !== undefined ? stats.recipientCount : current[0].recipient_count,
-                deliveredCount: stats.deliveredCount !== undefined ? stats.deliveredCount : current[0].delivered_count,
-                failedCount: stats.failedCount !== undefined ? stats.failedCount : current[0].failed_count,
-                readCount: stats.readCount !== undefined ? stats.readCount : current[0].read_count
-            };
+                // Calculate new counts safely - replace undefined with current values or 0
+                const newStats = {
+                    recipientCount: stats.recipientCount !== undefined ? stats.recipientCount : current[0].recipient_count,
+                    deliveredCount: stats.deliveredCount !== undefined ? stats.deliveredCount : current[0].delivered_count,
+                    failedCount: stats.failedCount !== undefined ? stats.failedCount : current[0].failed_count,
+                    readCount: stats.readCount !== undefined ? stats.readCount : current[0].read_count
+                };
 
-            // Ensure counts don't exceed recipients
-            newStats.deliveredCount = Math.min(newStats.deliveredCount, newStats.recipientCount);
-            newStats.failedCount = Math.min(newStats.failedCount, newStats.recipientCount);
-            newStats.readCount = Math.min(newStats.readCount, newStats.deliveredCount);
+                // Ensure counts don't exceed recipients
+                newStats.deliveredCount = Math.min(newStats.deliveredCount, newStats.recipientCount);
+                newStats.failedCount = Math.min(newStats.failedCount, newStats.recipientCount);
+                newStats.readCount = Math.min(newStats.readCount, newStats.deliveredCount);
 
-            // Update campaign stats
-            await connection.execute(
-                `UPDATE campaigns SET
+                // Update campaign stats
+                await connection.execute(
+                    `UPDATE campaigns SET
                 recipient_count = ?,
                 delivered_count = ?,
                 read_count = ?,
                 failed_count = ?,
                 updated_at = CURRENT_TIMESTAMP
              WHERE id = ?`, [
-                    newStats.recipientCount || 0,
-                    newStats.deliveredCount || 0,
-                    newStats.readCount || 0,
-                    newStats.failedCount || 0,
-                    campaignId
-                ]
-            );
+                        newStats.recipientCount || 0,
+                        newStats.deliveredCount || 0,
+                        newStats.readCount || 0,
+                        newStats.failedCount || 0,
+                        campaignId
+                    ]
+                );
 
-            // Update status based on new counts
-            const newStatus = determineCampaignStatus({
-                recipientCount: newStats.recipientCount,
-                deliveredCount: newStats.deliveredCount,
-                failedCount: newStats.failedCount
-            });
+                // Update status based on new counts
+                const newStatus = determineCampaignStatus({
+                    recipientCount: newStats.recipientCount,
+                    deliveredCount: newStats.deliveredCount,
+                    failedCount: newStats.failedCount
+                });
 
-            await connection.execute(
-                'UPDATE campaigns SET status = ? WHERE id = ?', [newStatus, campaignId]
-            );
+                await connection.execute(
+                    'UPDATE campaigns SET status = ? WHERE id = ?', [newStatus, campaignId]
+                );
 
-            await connection.commit();
-            return true;
-        } catch (error) {
-            await connection.rollback();
-            console.error('Error updating campaign stats:', error);
-            throw error;
-        } finally {
-            connection.release();
-        }
-    }
-
-    static async updateMessageStatusMap(campaignId, statusMap) {
-        const connection = await pool.getConnection();
-        try {
-            await connection.execute(
-                'UPDATE campaigns SET message_status_map = ? WHERE id = ?', [JSON.stringify(statusMap), campaignId]
-            );
-        } catch (error) {
-            console.error('Error updating message status map:', error);
-            throw error;
-        } finally {
-            connection.release();
-        }
-    }
-
-    static async getMessageStatusMap(campaignId) {
-            const [campaigns] = await pool.execute(
-                'SELECT message_status_map FROM campaigns WHERE id = ?', [campaignId]
-            );
-
-            if (campaigns.length === 0) return null;
-            try {
-                return JSON.parse(campaigns[0].message_status_map || '{}');
-            } catch (e) {
-                return {};
+                await connection.commit();
+                return true;
+            } catch (error) {
+                await connection.rollback();
+                console.error('Error updating campaign stats:', error);
+                throw error;
+            } finally {
+                connection.release();
             }
         }
-        // Delete campaign
+        // In campaignModel.js
+    static async incrementStats(campaignId, increments) {
+        const connection = await pool.getConnection();
+        try {
+            await connection.beginTransaction();
+
+            // Build update query dynamically
+            let updateQuery = 'UPDATE campaigns SET ';
+            const updateParts = [];
+            const params = [];
+
+            for (const [field, value] of Object.entries(increments)) {
+                updateParts.push(`${field} = ${field} + ?`);
+                params.push(value);
+            }
+
+            updateQuery += updateParts.join(', ');
+            updateQuery += ' WHERE id = ?';
+            params.push(campaignId);
+
+            await connection.execute(updateQuery, params);
+            await connection.commit();
+        } catch (error) {
+            await connection.rollback();
+            throw error;
+        } finally {
+            connection.release();
+        }
+    }
+
+    static async recalculateStatus(campaignId) {
+        const connection = await pool.getConnection();
+        try {
+            const [rows] = await connection.execute(
+                `SELECT recipient_count, delivered_count, failed_count, read_count 
+             FROM campaigns WHERE id = ?`, [campaignId]
+            );
+
+            const { recipient_count, delivered_count, failed_count, read_count } = rows[0];
+
+            const totalDone = delivered_count + failed_count;
+            let status = 'sending';
+            if (totalDone >= recipient_count) status = 'completed';
+
+            await connection.execute(
+                `UPDATE campaigns SET status = ? WHERE id = ?`, [status, campaignId]
+            );
+        } finally {
+            connection.release();
+        }
+    }
+
+    // Delete campaign
     static async delete(campaignId, userId) {
         const connection = await pool.getConnection();
         try {

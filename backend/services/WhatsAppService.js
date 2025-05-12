@@ -735,10 +735,15 @@ static async sendTemplateMessage(messageData) {
                 }
             }
         );
-// Ensure we return the message ID
-        return {
-            id: response.data?.messages?.[0]?.id,
-            ...response.data
+        console.log("REsponse:::::::::::::::::::::::::::::::")
+        console.log(JSON.stringify(response.data, null, 2) )
+return {
+            success: true,
+            messageId: response.data?.messages?.[0]?.id,
+            status: 'sent', // Initial status
+            timestamp: new Date().toISOString(),
+            recipientId: messageData.to,
+            rawResponse: response.data
         };
     } catch (error) {
         console.error('WhatsApp API Error:', error.response?.data || error.message);

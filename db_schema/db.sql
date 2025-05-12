@@ -111,8 +111,44 @@ CREATE TABLE whatsapp_templates.contacts (
   UNIQUE KEY unique_contact_in_list (wanumber, list_id)
 );
 
-
 alter table whatsapp_templates.templates modify column header_type ENUM('text', 'image', 'video','none') NOT NULL;
 
 ALTER TABLE whatsapp_templates.campaigns 
 MODIFY COLUMN status VARCHAR(50) NOT NULL DEFAULT 'draft';
+
+-- Business details table
+CREATE TABLE businesses (
+  id VARCHAR(36) PRIMARY KEY,
+  name VARCHAR(255) NOT NULL,
+  description TEXT,
+  profile_image_url VARCHAR(512),
+  industry ENUM('technology', 'retail', 'healthcare', 'finance', 'other') DEFAULT 'technology',
+  size ENUM('small', 'medium', 'large', 'enterprise') DEFAULT 'medium',
+  contact_email VARCHAR(255),
+  contact_phone VARCHAR(50),
+  website VARCHAR(255),
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+alter table users add column  business_id VARCHAR(36);
+INSERT INTO `whatsapp_templates`.`businesses` (`id`, `name`, `contact_phone`) VALUES (1, 'Meister Solutions', '919094995418');
+
+
+alter table whatsapp_templates.campaigns add column failed_count INT NOT NULL DEFAULT 0 after delivered_count;
+
+
+CREATE TABLE messages (
+    id VARCHAR(255) PRIMARY KEY,
+    campaign_id VARCHAR(255) NOT NULL,
+    contact_id VARCHAR(255) NOT NULL,
+    status ENUM('queued', 'sent', 'delivered', 'read', 'failed') DEFAULT 'queued',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+);
+ALTER TABLE messages
+ADD COLUMN error TEXT DEFAULT NULL,
+ADD COLUMN whatsapp_status VARCHAR(50) DEFAULT NULL,
+ADD COLUMN timestamp TIMESTAMP NULL;
+
+

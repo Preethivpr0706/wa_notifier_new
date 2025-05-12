@@ -98,13 +98,17 @@ class MessageController {
                 }
 
                 // Create campaign record
-                // Create campaign record
+                // Create campaign record with initial counts
                 const campaign = await Campaign.create({
                     name: `Bulk Send - ${new Date().toLocaleString()}`,
                     templateId,
-                    status: sendNow ? 'sending' : 'scheduled',
+                    status: 'sending', // Set to sending immediately
                     scheduledAt: scheduledAt || null,
-                    userId
+                    userId,
+                    recipientCount: targetContacts.length,
+                    deliveredCount: 0,
+                    failedCount: 0,
+                    readCount: 0
                 });
 
                 const results = {
@@ -113,10 +117,6 @@ class MessageController {
                     failures: 0,
                     errors: []
                 };
-
-                // Track message IDs and their statuses
-                const messageStatusMap = {};
-
                 // Process each contact
                 for (const contact of targetContacts) {
                     try {
@@ -129,8 +129,9 @@ class MessageController {
                             to: contact.wanumber,
                             template: template.name,
                             language: { code: template.language },
-                            bodyParameters: []
+                            bodyParameters: [] // Add your parameters here
                         };
+
 
                         // Handle header if exists
                         if (template.header_type && template.header_content) {
@@ -160,50 +161,42 @@ class MessageController {
                         }
 
                         // To this:
-                        const whatsappResponse = await WhatsAppService.sendTemplateMessage(message);
+                        // Send message and get immediate status
+                        const sendResult = await WhatsAppService.sendTemplateMessage(message);
 
-                        // Store initial status
-                        messageStatusMap[whatsappResponse.id] = {
-                            status: 'sent',
-                            contactId: contact.id,
-                            timestamp: new Date()
-                        };
-
+                        // Create message record with initial status
                         await MessageController.createMessageRecord({
-                            messageId: whatsappResponse.id,
+                            messageId: sendResult.messageId,
                             campaignId: campaign.id,
                             contactId: contact.id,
-                            status: 'sent'
+                            status: sendResult.success ? 'sent' : 'failed',
+                            error: sendResult.error,
+                            timestamp: sendResult.timestamp
                         });
 
-                        results.success++;
+                        // Update counts based on immediate result
+                        if (sendResult.success) {
+                            results.success++;
+                        } else {
+                            results.failures++;
+                            results.errors.push({
+                                contactId: contact.id,
+                                error: sendResult.error
+                            });
+                        }
                     } catch (error) {
-                        const failedId = `failed-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-                        messageStatusMap[failedId] = {
-                            status: 'failed',
-                            contactId: contact.id,
-                            timestamp: new Date(),
-                            error: error.message
-                        };
-
+                        // Create failed message record
                         await MessageController.createMessageRecord({
-                            messageId: failedId,
+                            messageId: `failed-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
                             campaignId: campaign.id,
                             contactId: contact.id,
                             status: 'failed',
                             error: error.message
                         });
 
-                        results.failures++;
-                        results.errors.push({
-                            contactId: contact ? contact.id : 'unknown',
-                            error: error.message
-                        });
                     }
                 }
-
-
-                // Initial stats update
+                // Update campaign with initial counts
                 const updatedStats = {
                     recipientCount: results.total,
                     deliveredCount: results.success,
@@ -211,28 +204,23 @@ class MessageController {
                     readCount: 0
                 };
 
-                // Store message status map in campaign for webhook updates
-                await Campaign.updateMessageStatusMap(campaign.id, messageStatusMap);
-                await Campaign.updateStats(campaign.id, updatedStats);
-                // Determine final status
-                let finalStatus = 'sending';
-                if (results.success === results.total) {
-                    finalStatus = 'completed';
-                } else if (results.success > 0) {
-                    finalStatus = 'partial';
-                } else if (results.failures === results.total) {
-                    finalStatus = 'failed';
+                // Determine initial status
+                let campaignStatus = 'sending';
+                if (results.failures === results.total) {
+                    campaignStatus = 'failed';
+                } else if (results.success === results.total) {
+                    campaignStatus = 'completed';
                 }
 
-                // Update campaign
                 await Campaign.updateStats(campaign.id, updatedStats);
-                await Campaign.updateStatus(campaign.id, finalStatus);
+                await Campaign.updateStatus(campaign.id, campaignStatus);
 
                 res.json({
                     success: true,
                     message: 'Messages queued for sending',
                     data: {
                         campaignId: campaign.id,
+                        initialStatus: campaignStatus,
                         ...results
                     }
                 });
@@ -270,77 +258,68 @@ class MessageController {
         }
     }
     static async verifyWebhook(req, res) {
-        try {
-            const mode = req.query['hub.mode'];
-            const token = req.query['hub.verify_token'];
-            const challenge = req.query['hub.challenge'];
+            try {
+                const mode = req.query['hub.mode'];
+                const token = req.query['hub.verify_token'];
+                const challenge = req.query['hub.challenge'];
 
-            const verifyToken = process.env.WHATSAPP_WEBHOOK_VERIFY_TOKEN;
+                const verifyToken = process.env.WHATSAPP_WEBHOOK_VERIFY_TOKEN;
 
-            if (mode && token) {
-                if (mode === 'subscribe' && token === verifyToken) {
-                    console.log('WEBHOOK_VERIFIED');
-                    return res.status(200).send(challenge);
+                if (mode && token) {
+                    if (mode === 'subscribe' && token === verifyToken) {
+                        console.log('WEBHOOK_VERIFIED');
+                        return res.status(200).send(challenge);
+                    }
                 }
-            }
 
-            return res.sendStatus(403);
-        } catch (error) {
-            console.error('Webhook verification failed:', error);
-            return res.sendStatus(500);
+                return res.sendStatus(403);
+            } catch (error) {
+                console.error('Webhook verification failed:', error);
+                return res.sendStatus(500);
+            }
         }
-    }
+        // controllers/messageController.js
     static async handleWebhook(req, res) {
         try {
             const { entry } = req.body;
-            res.status(200).send('EVENT_RECEIVED');
+            res.status(200).send('EVENT_RECEIVED'); // Respond immediately
 
             for (const item of entry) {
-                const { changes } = item;
-                for (const change of changes) {
-                    const { value } = change;
-
-                    if (value.statuses) {
-                        for (const status of value.statuses) {
+                for (const change of item.changes) {
+                    if (change.value.statuses) {
+                        for (const status of change.value.statuses) {
                             try {
-                                const { id: messageId, status: messageStatus } = status;
+                                const { id: messageId, status: messageStatus, timestamp } = status;
 
-                                // Update message status first
-                                await MessageController.updateMessageStatus(messageId, messageStatus);
+                                // Only process delivered and read statuses in webhook
+                                if (['delivered', 'read'].includes(messageStatus)) {
+                                    // Update message status
+                                    await MessageController.updateMessageStatus(
+                                        messageId,
+                                        messageStatus,
+                                        timestamp
+                                    );
 
-                                // Find which campaign this belongs to
-                                const campaign = await Campaign.getByMessageId(messageId);
-                                if (!campaign) continue;
+                                    // Get campaign for this message
+                                    const campaign = await Campaign.getByMessageId(messageId);
+                                    if (!campaign) continue;
 
-                                // Get current status map
-                                const statusMap = await Campaign.getMessageStatusMap(campaign.id) || {};
+                                    // Prepare update based on status
+                                    const update = {};
+                                    if (messageStatus === 'read') {
+                                        update.read_count = 1; // Increment by 1
+                                    }
 
-                                // Update status in map
-                                if (statusMap[messageId]) {
-                                    statusMap[messageId].status = messageStatus;
-                                    statusMap[messageId].updated = new Date();
+                                    // Update campaign stats atomically
+                                    if (Object.keys(update).length > 0) {
+                                        await Campaign.incrementStats(
+                                            campaign.id,
+                                            update
+                                        );
+                                    }
 
-                                    // Recalculate counts
-                                    const counts = {
-                                        deliveredCount: 0,
-                                        failedCount: 0,
-                                        readCount: 0
-                                    };
-
-                                    Object.values(statusMap).forEach(msg => {
-                                        if (msg.status === 'delivered') counts.deliveredCount++;
-                                        if (msg.status === 'failed') counts.failedCount++;
-                                        if (msg.status === 'read') counts.readCount++;
-                                    });
-
-                                    // Update campaign stats
-                                    await Campaign.updateStats(campaign.id, {
-                                        recipientCount: campaign.recipient_count,
-                                        ...counts
-                                    });
-
-                                    // Save updated status map
-                                    await Campaign.updateMessageStatusMap(campaign.id, statusMap);
+                                    // Re-evaluate campaign status after update
+                                    await Campaign.recalculateStatus(campaign.id);
                                 }
                             } catch (error) {
                                 console.error('Error processing status update:', error);
@@ -351,6 +330,75 @@ class MessageController {
             }
         } catch (error) {
             console.error('Webhook processing error:', error);
+        }
+    }
+
+    static async processMessageStatus(status) {
+        const connection = await pool.getConnection();
+        try {
+            await connection.beginTransaction();
+
+            // 1. Update the message record
+            const [updated] = await connection.execute(
+                `UPDATE messages SET 
+                status = ?,
+                whatsapp_status = ?,
+                timestamp = ?,
+                updated_at = NOW()
+             WHERE id = ?`, [status.status, status.status, status.timestamp, status.id]
+            );
+
+            if (updated.affectedRows === 0) {
+                console.warn(`Message ${status.id} not found in database`);
+                return;
+            }
+
+            // 2. Get the campaign ID
+            const [message] = await connection.execute(
+                'SELECT campaign_id FROM messages WHERE id = ?', [status.id]
+            );
+
+            if (!message[0]) return;
+
+            const campaignId = message[0].campaign_id;
+
+            // 3. Get current campaign stats
+            const [campaign] = await connection.execute(
+                'SELECT * FROM campaigns WHERE id = ?', [campaignId]
+            );
+
+            if (!campaign[0]) return;
+
+            // 4. Calculate new stats based on status change
+            const update = {
+                recipientCount: campaign[0].recipient_count,
+                deliveredCount: campaign[0].delivered_count,
+                failedCount: campaign[0].failed_count,
+                readCount: campaign[0].read_count
+            };
+
+            switch (status.status) {
+                case 'delivered':
+                    update.deliveredCount += 1;
+                    break;
+                case 'read':
+                    update.readCount += 1;
+                    break;
+                case 'failed':
+                    update.failedCount += 1;
+                    break;
+                    // Other statuses can be handled as needed
+            }
+
+            // 5. Update campaign stats
+            await Campaign.updateStats(campaignId, update);
+
+            await connection.commit();
+        } catch (error) {
+            await connection.rollback();
+            throw error;
+        } finally {
+            connection.release();
         }
     }
     static async updateMessageStatus(messageId, newStatus) {
