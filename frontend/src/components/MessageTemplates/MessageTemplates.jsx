@@ -1,7 +1,6 @@
-// src/pages/MessageTemplates.jsx
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Search, Filter, Eye, Edit, Trash, AlertCircle, Clock ,RefreshCw} from 'lucide-react';
+import { Plus, Search, Eye, Edit, Trash, AlertCircle, Clock, RefreshCw, ExternalLink, Phone } from 'lucide-react';
 import { templateService } from '../../api/templateService';
 import './MessageTemplates.css';
 
@@ -15,7 +14,9 @@ function MessageTemplates() {
   const [deleteConfirm, setDeleteConfirm] = useState(null);
   const [selectedTemplate, setSelectedTemplate] = useState(null);
   const [isDeleting, setIsDeleting] = useState(false);
-  const [templateToDelete, setTemplateToDelete] = useState(null); 
+  const [templateToDelete, setTemplateToDelete] = useState(null);
+  const [isCheckingStatus, setIsCheckingStatus] = useState(false);
+
   useEffect(() => {
     fetchTemplates();
   }, [activeFilter]);
@@ -57,10 +58,8 @@ function MessageTemplates() {
     navigate('/templates/create');
   };
 
-  // In the handleEditTemplate function
   const handleEditTemplate = (template) => {
     if (template.status === 'draft') {
-      // For drafts, navigate to create page with template data
       navigate('/templates/create', { 
         state: { 
           draftTemplate: template,
@@ -68,29 +67,31 @@ function MessageTemplates() {
         } 
       });
     } else {
-      // For submitted templates, go to edit page
       navigate(`/templates/edit/${template.id}`, { 
         state: { template } 
       });
     }
   };
+
   const handlePreviewTemplate = (template) => {
     setSelectedTemplate(template);
   };
 
-  const closePreview = () => {
-    setSelectedTemplate(null);
+  const closePreview = (e) => {
+    if (e.target === e.currentTarget) {
+      setSelectedTemplate(null);
+    }
   };
 
   const confirmDelete = (id) => {
     const template = templates.find(t => t.id === id);
-    setTemplateToDelete(template); // Store the full template
+    setTemplateToDelete(template);
     setDeleteConfirm(id);
   };
 
   const cancelDelete = () => {
     setDeleteConfirm(null);
-    setTemplateToDelete(null); // Clear the template reference
+    setTemplateToDelete(null);
   };
 
   const deleteTemplate = async () => {
@@ -98,7 +99,6 @@ function MessageTemplates() {
       setIsDeleting(true);
       setError(null);
       
-      // Check if it's a draft template (only delete from DB)
       if (templateToDelete?.status === 'draft') {
         const response = await templateService.deleteTemplate(deleteConfirm);
         
@@ -112,7 +112,6 @@ function MessageTemplates() {
         return;
       }
       
-      // For non-draft templates, proceed with normal delete flow
       const response = await templateService.deleteTemplate(deleteConfirm);
       
       if (response.success) {
@@ -128,6 +127,54 @@ function MessageTemplates() {
       setIsDeleting(false);
     }
   };
+
+  const handleCheckStatus = async (templateId) => {
+    try {
+      setIsCheckingStatus(true);
+      setError(null);
+      await templateService.checkTemplateStatus(templateId);
+      fetchTemplates();
+    } catch (err) {
+      setError('Failed to check template status: ' + err.message);
+    } finally {
+      setIsCheckingStatus(false);
+    }
+  };
+
+  const handleSubmitDraft = async (templateId) => {
+    try {
+      setIsLoading(true);
+      setError(null);
+      
+      const response = await templateService.submitDraftTemplate(templateId);
+      
+      if (response.success) {
+        fetchTemplates();
+      } else {
+        setError(response.message || 'Failed to submit draft template');
+      }
+    } catch (err) {
+      setError('Failed to submit draft template: ' + err.message);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    let pollingInterval;
+    
+    if (templates.some(template => template.status === 'pending')) {
+      pollingInterval = setInterval(() => {
+        fetchTemplates();
+      }, 30000);
+    }
+
+    return () => {
+      if (pollingInterval) {
+        clearInterval(pollingInterval);
+      }
+    };
+  }, [templates]);
 
   const filteredTemplates = templates.filter((template) => {
     const matchesSearch = template.name.toLowerCase().includes(searchQuery.toLowerCase());
@@ -154,11 +201,9 @@ function MessageTemplates() {
   };
 
   const formatDate = (dateString) => {
-    // Create date objects in the same timezone (UTC)
     const templateDate = new Date(dateString);
     const now = new Date();
     
-    // Normalize both dates to midnight for day comparison
     const templateDay = new Date(Date.UTC(
         templateDate.getUTCFullYear(), 
         templateDate.getUTCMonth(), 
@@ -173,63 +218,121 @@ function MessageTemplates() {
     
     const diffDays = Math.floor((today - templateDay) / (1000 * 60 * 60 * 24));
     
-    if (diffDays === 0) return 'Today';
-    if (diffDays === 1) return 'Yesterday';
-    if (diffDays < 7) return `${diffDays} days ago`;
-    if (diffDays < 30) return `${Math.floor(diffDays / 7)} weeks ago`;
-    if (diffDays < 365) return `${Math.floor(diffDays / 30)} months ago`;
-    return `${Math.floor(diffDays / 365)} years ago`;
-};
+if (diffDays === 0) return 'Today';
+if (diffDays === 1) return 'Yesterday';
+if (diffDays < 7) return `${diffDays} days ago`;
+if (diffDays < 30) return `${Math.floor(diffDays / 7)} weeks ago`;
+if (diffDays < 365) return `${Math.floor(diffDays / 30)} months ago`;
+return `${Math.floor(diffDays / 365)} years ago`;
+  };
 
-  // Add polling for pending templates
-  useEffect(() => {
-    let pollingInterval;
+  const renderHeaderContent = (template) => {
+    if (!template.header_type) return null;
     
-    if (templates.some(template => template.status === 'pending')) {
-      pollingInterval = setInterval(() => {
-        fetchTemplates();
-      }, 30000); // Poll every 30 seconds
-    }
-
-    return () => {
-      if (pollingInterval) {
-        clearInterval(pollingInterval);
-      }
-    };
-  }, [templates]);
-
-  const [isCheckingStatus, setIsCheckingStatus] = useState(false);
-
-  const handleCheckStatus = async (templateId) => {
-    try {
-      setIsCheckingStatus(true);
-      setError(null);
-      await templateService.checkTemplateStatus(templateId);
-      fetchTemplates(); // Refresh the list to show updated status
-    } catch (err) {
-      setError('Failed to check template status: ' + err.message);
-    } finally {
-      setIsCheckingStatus(false);
+    switch (template.header_type) {
+      case 'text':
+        return template.header_content && (
+          <div className="template-header-content">{template.header_content}</div>
+        );
+      case 'image':
+        return (
+          <div className="template-header-image">
+            <div className="image-placeholder">
+              <span>Image Preview</span>
+            </div>
+          </div>
+        );
+      case 'document':
+        return (
+          <div className="template-header-document">
+            <div className="document-icon">📄</div>
+            <div className="document-name">{template.header_content || 'Document.pdf'}</div>
+          </div>
+        );
+      case 'video':
+        return (
+          <div className="template-header-video">
+            <div className="video-icon">🎬</div>
+            <div className="video-name">{template.header_content || 'Video.mp4'}</div>
+          </div>
+        );
+      default:
+        return null;
     }
   };
 
-  const handleSubmitDraft = async (templateId) => {
-    try {
-      setIsLoading(true);
-      setError(null);
-      
-      const response = await templateService.submitDraftTemplate(templateId);
-      
-      if (response.success) {
-        fetchTemplates(); // Refresh the list
-      } else {
-        setError(response.message || 'Failed to submit draft template');
-      }
-    } catch (err) {
-      setError('Failed to submit draft template: ' + err.message);
-    } finally {
-      setIsLoading(false);
-    }
+  const renderTemplateButtons = (buttons) => {
+    if (!buttons || buttons.length === 0) return null;
+
+    return (
+      <div className="template-buttons">
+        {buttons.map((button, index) => {
+          if (button.type === 'url') {
+            return (
+              <div key={index} className="template-button url-button">
+                <ExternalLink size={14} />
+                <span>{button.text}</span>
+              </div>
+            );
+          } else if (button.type === 'call') {
+            return (
+              <div key={index} className="template-button call-button">
+                <Phone size={14} />
+                <span>{button.text}</span>
+              </div>
+            );
+          } else {
+            return (
+              <div key={index} className="template-button">
+                {button.text}
+              </div>
+            );
+          }
+        })}
+      </div>
+    );
+  };
+
+  const renderTemplateContent = (template) => {
+    return (
+      <div className="message-container">
+        <div className="message-bubble received-message">
+          {renderHeaderContent(template)}
+          
+          {template.body_text && (
+            <div className="message-text">{template.body_text}</div>
+          )}
+          
+          {template.footer_text && (
+            <div className="template-footer">{template.footer_text}</div>
+          )}
+          
+          {template.buttons && template.buttons.length > 0 && (
+            renderTemplateButtons(template.buttons)
+          )}
+        </div>
+      </div>
+    );
+  };
+
+  const renderTemplatePreview = (template) => {
+    return (
+      <div className="phone-screen">
+        <div className="chat-header">
+          <div className="chat-avatar">
+            <div className="profile-initials">YB</div>
+          </div>
+          <div className="chat-info">
+            <div className="chat-name">Your Business</div>
+            <div className="chat-status">Business Account</div>
+          </div>
+        </div>
+        
+        <div className="chat-messages">
+          {renderTemplateContent(template)}
+        </div>
+      </div>
+    );
   };
 
   return (
@@ -323,39 +426,31 @@ function MessageTemplates() {
                 </div>
                
                 <div className="template-status-container">
-        <div className={`template-status ${getStatusClass(template.status)}`}>
-          {template.status}
-        </div>
-        {template.status === 'pending' && (
-  <button 
-    className="btn-icon" 
-    onClick={() => handleCheckStatus(template.id)}
-    title="Check status"
-    disabled={isCheckingStatus}
-  >
-    <RefreshCw size={16} className={isCheckingStatus ? "spinning" : ""} />
-  </button>
-)}
-        {template.status === 'rejected' && template.rejection_reason && (
-          <div className="rejection-reason">
-            Reason: {template.rejection_reason}
-          </div>
-        )}
-      </div>
+                  <div className={`template-status ${getStatusClass(template.status)}`}>
+                    {template.status}
+                  </div>
+                  {template.status === 'pending' && (
+                    <button 
+                      className="btn-icon" 
+                      onClick={() => handleCheckStatus(template.id)}
+                      title="Check status"
+                      disabled={isCheckingStatus}
+                    >
+                      <RefreshCw size={16} className={isCheckingStatus ? "spinning" : ""} />
+                    </button>
+                  )}
+                  {template.status === 'rejected' && template.rejection_reason && (
+                    <div className="rejection-reason">
+                      Reason: {template.rejection_reason}
+                    </div>
+                  )}
+                </div>
               </div>
               
               <h3 className="template-name">{template.name}</h3>
               
               <div className="template-preview">
-                {template.header_type === 'text' && template.header_content && (
-                  <div className="preview-header">{template.header_content}</div>
-                )}
-                {template.body_text && (
-                  <div className="preview-body">{template.body_text}</div>
-                )}
-                {template.footer_text && (
-                  <div className="preview-footer">{template.footer_text}</div>
-                )}
+                {renderTemplateContent(template)}
               </div>
               
               <div className="template-info">
@@ -370,79 +465,79 @@ function MessageTemplates() {
               </div>
               
               <div className="template-actions">
-  <button 
-    className="btn-secondary"
-    onClick={() => handlePreviewTemplate(template)}
-  >
-    <Eye size={16} />
-    <span>Preview</span>
-  </button>
-  
-  {template.status === 'draft' && (
-    <button
-      className="btn btn-primary"
-      onClick={() => handleSubmitDraft(template.id)}
-      disabled={isLoading}
-    >
-      <RefreshCw size={16} />
-      <span>Submit</span>
-    </button>
-  )}
-  
-  <div className="action-buttons">
- 
-<button 
-  className="action-btn"
-  onClick={() => handleEditTemplate(template)}
-  title={template.status === 'draft' ? 'Continue editing' : 'Edit template'}
->
-  <Edit size={16} />
-</button>
+                <button 
+                  className="btn-secondary"
+                  onClick={() => handlePreviewTemplate(template)}
+                >
+                  <Eye size={16} />
+                  <span>Preview</span>
+                </button>
+                
+                {template.status === 'draft' && (
+                  <button
+                    className="btn btn-primary"
+                    onClick={() => handleSubmitDraft(template.id)}
+                    disabled={isLoading}
+                  >
+                    <RefreshCw size={16} />
+                    <span>Submit</span>
+                  </button>
+                )}
+                
+                <div className="action-buttons">
+                  <button 
+                    className="action-btn"
+                    onClick={() => handleEditTemplate(template)}
+                    title={template.status === 'draft' ? 'Continue editing' : 'Edit template'}
+                  >
+                    <Edit size={16} />
+                  </button>
 
-    <button 
-      className="action-btn delete-btn"
-      onClick={() => confirmDelete(template.id)}
-      title="Delete template"
-    >
-      <Trash size={16} />
-    </button>
-  </div>
-</div>
+                  <button 
+                    className="action-btn delete-btn"
+                    onClick={() => confirmDelete(template.id)}
+                    title="Delete template"
+                  >
+                    <Trash size={16} />
+                  </button>
+                </div>
+              </div>
             </div>
           ))}
         </div>
       )}
       
       {deleteConfirm && (
-  <div className="modal-overlay">
-    <div className="modal-content">
-      <h3>Delete Template?</h3>
-      {templateToDelete?.status === 'draft' ? (
-        <p>This draft template will be permanently deleted from the system.</p>
-      ) : templateToDelete?.whatsapp_id ? (
-        <div className="whatsapp-warning">
-          <AlertCircle size={16} />
-          <span>This template is registered with WhatsApp (ID: {templateToDelete.whatsapp_id})</span>
-        </div>
-      ) : null}
-      <p>Are you sure you want to delete "{templateToDelete?.name}"?</p>
-      <div className="modal-actions">
-        <button className="btn btn-secondary" onClick={cancelDelete}>
-          Cancel
-        </button>
-        <button 
-          className="btn btn-danger" 
-          onClick={deleteTemplate}
-          disabled={isDeleting}
-        >
-          {isDeleting ? 'Deleting...' : 'Confirm Delete'}
-        </button>
-      </div>
-    </div>
-  </div>
-)}
-      {selectedTemplate && (
         <div className="modal-overlay">
+          <div className="modal-content">
+            <h3>Delete Template?</h3>
+            {templateToDelete?.status === 'draft' ? (
+              <p>This draft template will be permanently deleted from the system.</p>
+            ) : templateToDelete?.whatsapp_id ? (
+              <div className="whatsapp-warning">
+                <AlertCircle size={16} />
+                <span>This template is registered with WhatsApp (ID: {templateToDelete.whatsapp_id})</span>
+              </div>
+            ) : null}
+            <p>Are you sure you want to delete "{templateToDelete?.name}"?</p>
+            <div className="modal-actions">
+              <button className="btn btn-secondary" onClick={cancelDelete}>
+                Cancel
+              </button>
+              <button 
+                className="btn btn-danger" 
+                onClick={deleteTemplate}
+                disabled={isDeleting}
+              >
+                {isDeleting ? 'Deleting...' : 'Confirm Delete'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {selectedTemplate && (
+        <div className="modal-overlay" onClick={closePreview}>
           <div className="modal-content preview-modal">
             <div className="preview-header">
               <h3>Template Preview</h3>
@@ -450,54 +545,7 @@ function MessageTemplates() {
             </div>
             <div className="preview-content">
               <div className="phone-preview">
-                <div className="phone-header">
-                  <div className="phone-notch"></div>
-                </div>
-                <div className="phone-content">
-                  <div className="chat-header">
-                    <div className="chat-profile">
-                      <div className="chat-avatar">
-                        <img src="/whatsapp-logo.svg" alt="WhatsApp" />
-                      </div>
-                      <div className="chat-info">
-                        <span className="chat-name">Your Business</span>
-                        <span className="chat-status">Online</span>
-                      </div>
-                    </div>
-                  </div>
-                  
-                  <div className="chat-messages">
-                    {selectedTemplate.header_type === 'text' && selectedTemplate.header_content && (
-                      <div className="message-header">{selectedTemplate.header_content}</div>
-                    )}
-                    {selectedTemplate.header_type === 'image' && selectedTemplate.header_content && (
-                      <div className="message-image">
-                        <img src={selectedTemplate.header_content} alt="Header" />
-                      </div>
-                    )}
-                    {selectedTemplate.header_type === 'video' && selectedTemplate.header_content && (
-                      <div className="message-video">
-                        <video src={selectedTemplate.header_content} controls />
-                      </div>
-                    )}
-                    
-                    <div className="message-body">{selectedTemplate.body_text}</div>
-                    
-                    {selectedTemplate.footer_text && (
-                      <div className="message-footer">{selectedTemplate.footer_text}</div>
-                    )}
-                    
-                    {selectedTemplate.buttons && selectedTemplate.buttons.length > 0 && (
-                      <div className="message-buttons">
-                        {selectedTemplate.buttons.map((button, index) => (
-                          <button key={index} className="message-button">
-                            {button.text}
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                </div>
+                {renderTemplatePreview(selectedTemplate)}
               </div>
             </div>
           </div>

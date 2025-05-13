@@ -152,3 +152,10 @@ ADD COLUMN whatsapp_status VARCHAR(50) DEFAULT NULL,
 ADD COLUMN timestamp TIMESTAMP NULL;
 
 
+
+CREATE TABLE message_status_history (
+    id VARCHAR(50) PRIMARY KEY,
+    message_id VARCHAR(200) NOT NULL,
+    status VARCHAR(20) NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);

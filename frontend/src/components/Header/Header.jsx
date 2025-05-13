@@ -1,9 +1,10 @@
-import { useLocation } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { Menu, PlusCircle, Bell, User } from 'lucide-react';
 import './Header.css';
 
 function Header({ toggleSidebar }) {
   const location = useLocation();
+  const navigate = useNavigate();
   const { pathname } = location;
 
   const getPageTitle = () => {
@@ -67,7 +68,10 @@ function Header({ toggleSidebar }) {
             <span className="notification-badge">3</span>
           </button>
           <div className="user-profile">
-            <button className="user-profile-btn">
+            <button 
+              className="user-profile-btn"
+              onClick={() => navigate('/settings')}
+            >
               <div className="avatar">
                 <User size={20} />
               </div>

@@ -3,20 +3,19 @@ const { pool } = require('../config/database');
 const { v4: uuidv4 } = require('uuid');
 
 function determineCampaignStatus({ recipientCount, deliveredCount, failedCount }) {
-    // Convert to numbers in case they come as strings
     recipientCount = Number(recipientCount) || 0;
     deliveredCount = Number(deliveredCount) || 0;
     failedCount = Number(failedCount) || 0;
 
     const totalProcessed = deliveredCount + failedCount;
 
-    if (recipientCount === 0) return 'draft'; // No recipients yet
-    if (totalProcessed === 0) return 'scheduled'; // Created but not sent
-    if (totalProcessed < recipientCount) return 'sending'; // In progress
-    if (failedCount === recipientCount) return 'failed'; // All failed
-    if (deliveredCount === recipientCount) return 'completed'; // All delivered
-    if (failedCount > 0 && deliveredCount > 0) return 'partial'; // Some succeeded, some failed
-    return 'sending'; // Default fallback
+    if (recipientCount === 0) return 'draft';
+    if (totalProcessed === 0) return 'scheduled';
+    if (totalProcessed < recipientCount) return 'sending';
+    if (failedCount === recipientCount) return 'failed';
+    if (deliveredCount === recipientCount) return 'completed';
+    if (failedCount > 0 && deliveredCount > 0) return 'partial';
+    return 'sending';
 }
 class Campaign {
     // Create a new campaign
@@ -77,6 +76,7 @@ class Campaign {
             c.id, c.name, c.status, c.scheduled_at as scheduledAt,
             c.recipient_count as recipientCount,
             c.delivered_count as deliveredCount,
+             c.failed_count as failedCount, 
             c.read_count as readCount,
             t.name as templateName, t.category as templateCategory
         FROM campaigns c
@@ -144,37 +144,35 @@ class Campaign {
                     throw new Error('Campaign not found');
                 }
 
-                // Calculate new counts safely - replace undefined with current values or 0
+                // Calculate new counts safely
                 const newStats = {
                     recipientCount: stats.recipientCount !== undefined ? stats.recipientCount : current[0].recipient_count,
-                    deliveredCount: stats.deliveredCount !== undefined ? stats.deliveredCount : current[0].delivered_count,
-                    failedCount: stats.failedCount !== undefined ? stats.failedCount : current[0].failed_count,
-                    readCount: stats.readCount !== undefined ? stats.readCount : current[0].read_count
+                    deliveredCount: stats.deliveredCount !== undefined ?
+                        Math.min(stats.deliveredCount, current[0].recipient_count) : current[0].delivered_count,
+                    failedCount: stats.failedCount !== undefined ?
+                        Math.min(stats.failedCount, current[0].recipient_count) : current[0].failed_count,
+                    readCount: stats.readCount !== undefined ?
+                        Math.min(stats.readCount, current[0].delivered_count) : current[0].read_count
                 };
-
-                // Ensure counts don't exceed recipients
-                newStats.deliveredCount = Math.min(newStats.deliveredCount, newStats.recipientCount);
-                newStats.failedCount = Math.min(newStats.failedCount, newStats.recipientCount);
-                newStats.readCount = Math.min(newStats.readCount, newStats.deliveredCount);
 
                 // Update campaign stats
                 await connection.execute(
                     `UPDATE campaigns SET
-                recipient_count = ?,
-                delivered_count = ?,
-                read_count = ?,
-                failed_count = ?,
-                updated_at = CURRENT_TIMESTAMP
-             WHERE id = ?`, [
-                        newStats.recipientCount || 0,
-                        newStats.deliveredCount || 0,
-                        newStats.readCount || 0,
-                        newStats.failedCount || 0,
+       recipient_count = ?,
+       delivered_count = ?,
+       failed_count = ?,
+       read_count = ?,
+       updated_at = CURRENT_TIMESTAMP
+       WHERE id = ?`, [
+                        newStats.recipientCount,
+                        newStats.deliveredCount,
+                        newStats.failedCount,
+                        newStats.readCount,
                         campaignId
                     ]
                 );
 
-                // Update status based on new counts
+                // Determine new status based on counts
                 const newStatus = determineCampaignStatus({
                     recipientCount: newStats.recipientCount,
                     deliveredCount: newStats.deliveredCount,
@@ -189,7 +187,6 @@ class Campaign {
                 return true;
             } catch (error) {
                 await connection.rollback();
-                console.error('Error updating campaign stats:', error);
                 throw error;
             } finally {
                 connection.release();
@@ -247,7 +244,68 @@ class Campaign {
         }
     }
 
-    // Delete campaign
+    static async calculateStatsFromMessages(campaignId) {
+            const connection = await pool.getConnection();
+            try {
+                await connection.beginTransaction();
+
+                // Get counts from messages table
+                const [messageStats] = await connection.execute(
+                    `SELECT 
+        COUNT(*) as total,
+        SUM(CASE WHEN status IN ('delivered', 'read') THEN 1 ELSE 0 END) as delivered,
+        SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) as failed,
+        SUM(CASE WHEN status = 'read' THEN 1 ELSE 0 END) as read_count
+       FROM messages 
+       WHERE campaign_id = ?`, [campaignId]
+                );
+
+                if (messageStats.length === 0) {
+                    throw new Error('No messages found for campaign');
+                }
+
+                const stats = messageStats[0];
+
+                // Update campaign with these counts
+                await connection.execute(
+                    `UPDATE campaigns SET
+        delivered_count = ?,
+        failed_count = ?,
+        read_count = ?,
+        updated_at = CURRENT_TIMESTAMP
+       WHERE id = ?`, [
+                        stats.delivered || 0,
+                        stats.failed || 0,
+                        stats.read_count || 0,
+                        campaignId
+                    ]
+                );
+
+                // Determine new status based on counts
+                const [campaign] = await connection.execute(
+                    'SELECT recipient_count FROM campaigns WHERE id = ?', [campaignId]
+                );
+
+                const newStatus = determineCampaignStatus({
+                    recipientCount: campaign[0].recipient_count,
+                    deliveredCount: stats.delivered || 0,
+                    failedCount: stats.failed || 0
+                });
+
+                await connection.execute(
+                    'UPDATE campaigns SET status = ? WHERE id = ?', [newStatus, campaignId]
+                );
+
+                await connection.commit();
+                return true;
+            } catch (error) {
+                await connection.rollback();
+                throw error;
+            } finally {
+                connection.release();
+            }
+        }
+        // Delete campaign
     static async delete(campaignId, userId) {
         const connection = await pool.getConnection();
         try {

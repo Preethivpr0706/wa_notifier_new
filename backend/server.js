@@ -10,7 +10,7 @@ const contactRoutes = require('./routes/contactRoutes');
 const messageRoutes = require('./routes/messageRoutes');
 const businessRoutes = require('./routes/businessRoutes');
 const campaignRoutes = require('./routes/campaignRoutes');
-
+const Message = require('./controllers/messageController');
 
 require('dotenv').config();
 
@@ -36,6 +36,15 @@ app.use('/api/messages/', messageRoutes);
 app.use('/api/campaigns', campaignRoutes);
 
 app.use('/api/business', businessRoutes);
+
+// Add to your server initialization code
+setInterval(async() => {
+    try {
+        await Message.checkStalledMessages();
+    } catch (error) {
+        console.error('Error checking stalled messages:', error);
+    }
+}, 15 * 60 * 1000); // Check every 15 minutes
 // Add this with your other middleware
 app.use('/uploads', express.static(
     path.join(__dirname, 'public/uploads'), {

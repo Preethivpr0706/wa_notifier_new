@@ -12,7 +12,7 @@ import './styles/App.css';
 import EditTemplate from './components/EditTemplate/EditTemplate';
 import ImportContacts from './components/Contact/ImportContacts';
 import ContactLists from './components/Contact/ContactLists';
-
+import CampaignDetails from './components/Campaigns/CampaignDetails';
 function App() {
   const [sidebarOpen, setSidebarOpen] = useState(true);
 
@@ -36,6 +36,7 @@ function App() {
             <Route path="/settings" element={<Settings />} />
             <Route path="/contacts/import" element={<ImportContacts/>}/>
             <Route path="/contacts/list" element={<ContactLists />} />
+            <Route path="/campaigns/:id" element={<CampaignDetails />} />
          </Routes>
         </div>
       </div>

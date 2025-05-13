@@ -68,10 +68,14 @@ class CampaignController {
             const campaigns = await Campaign.getAllByUser(userId, filters);
 
             console.log('Found campaigns:', campaigns.length); // Log results
+            const formattedCampaigns = campaigns.map(campaign => ({
+                ...campaign,
+                failedCount: campaign.failedCount || 0 // Ensure failedCount is always present
+            }));
 
             res.json({
                 success: true,
-                data: campaigns // Changed from just campaigns to match frontend expectation
+                data: formattedCampaigns
             });
         } catch (error) {
             console.error('Error in getCampaigns:', error); // Detailed error logging
@@ -87,7 +91,7 @@ class CampaignController {
     static async getCampaignById(req, res) {
         try {
             const { id } = req.params;
-            const userId = req.user.id;
+            const userId = 1;
 
             const campaign = await Campaign.getById(id, userId);
 

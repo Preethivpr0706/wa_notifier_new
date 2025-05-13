@@ -300,13 +300,15 @@ const calculatePercentage = (part, total) => {
                 </span>
             </div>
             
-            <div className="info-item">
+           <div className="info-item">
   <span className="info-label">Failed:</span>
   <span className="info-value">
     {campaign.failedCount?.toLocaleString() || '0'}
-    <span className="percentage">
-      ({calculatePercentage(campaign.failedCount, campaign.recipientCount)})
-    </span>
+    {campaign.recipientCount > 0 && (
+      <span className="percentage">
+        ({calculatePercentage(campaign.failedCount, campaign.recipientCount)})
+      </span>
+    )}
   </span>
 </div>
             
