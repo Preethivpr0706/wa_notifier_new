@@ -26,6 +26,8 @@ function SendMessage() {
   // Add to your component's state
 const [validationErrors, setValidationErrors] = useState([]);
 const [successMessage, setSuccessMessage] = useState('');
+// Add to your state
+const [isDraftSaving, setIsDraftSaving] = useState(false);
   const [formData, setFormData] = useState({
     templateId: '',
     audienceType: 'all',
@@ -211,7 +213,46 @@ const handleSubmit = async (e) => {
     setIsLoading(false);
   }
 };
+// Add the save draft handler
+const handleSaveAsDraft = async () => {
+    try {
+        setIsDraftSaving(true);
+        
+        let targetContacts = [];
+        if (formData.audienceType === 'all') {
+            targetContacts = contacts;
+        } else if (formData.audienceType === 'list') {
+            targetContacts = contacts.filter(c => c.list_id === formData.contactList);
+        } else if (formData.audienceType === 'custom') {
+            targetContacts = csvData;
+        }
+        
+        const payload = {
+            templateId: formData.templateId,
+            audience_type: formData.audienceType.toLowerCase(),
+            contacts: targetContacts.map(c => ({
+                id: c.id,
+                wanumber: c.wanumber,
+                fname: c.fname || '',
+                lname: c.lname || '',
+                email: c.email || '',
+                list_id: c.list_id || null
+            })),
+            fieldMappings: formData.fieldMappings,
+            scheduledAt: formData.sendNow ? null : 
+                `${formData.scheduledDate}T${formData.scheduledTime}:00Z`
+        };
 
+        await messageService.saveDraft(payload);
+        navigate('/campaigns', { 
+            state: { success: 'Campaign saved as draft!' } 
+        });
+    } catch (err) {
+        setError('Failed to save draft: ' + (err.message || 'Unknown error'));
+    } finally {
+        setIsDraftSaving(false);
+    }
+};
 
   const selectedTemplate = templates.find(t => t.id === formData.templateId);
   const contactFields = contacts.length > 0 ? Object.keys(contacts[0]) : [];
@@ -554,6 +595,15 @@ const handleSubmit = async (e) => {
               >
                 Back
               </button>
+                 
+      {/* Add Save as Draft button */}
+      <button
+        type="button"
+        className="btn btn-outline-primary"
+        onClick={() => handleSaveAsDraft()}
+        disabled={isLoading || isDraftSaving}
+      >{isDraftSaving ? 'Saving...' : 'Save as Draft'}
+            </button>
               <button
                 type="submit"
                 className="btn btn-primary"

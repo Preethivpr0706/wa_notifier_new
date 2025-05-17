@@ -159,3 +159,8 @@ CREATE TABLE message_status_history (
     status VARCHAR(20) NOT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+
+
+
+ALTER TABLE campaigns ADD COLUMN contacts JSON;
+ALTER TABLE campaigns ADD COLUMN field_mappings JSON;

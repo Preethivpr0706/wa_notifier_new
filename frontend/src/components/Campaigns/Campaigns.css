@@ -344,3 +344,16 @@
     background-color: var(--color-info-light);
     color: var(--color-info);
 }
+
+
+/* src/pages/Campaigns.css */
+
+.status-draft {
+    background-color: var(--color-info-light);
+    color: var(--color-info);
+}
+
+.action-buttons {
+    display: flex;
+    gap: 8px;
+}

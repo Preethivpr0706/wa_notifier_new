@@ -474,72 +474,199 @@ class MessageController {
         }
         // controllers/messageController.js
 
-    static async processCampaignMessages(campaignId, contacts, fieldMappings, templateId) {
-        // Get template
-        const template = await Template.getByIdForSending(templateId);
+    static async processCampaignMessages(campaignId, contacts, fieldMappings, templateId, userId) {
+            // Get template
+            const template = await Template.getByIdForSending(templateId, userId);
 
-        for (const contact of contacts) {
-            try {
-                // Prepare message
-                const message = {
-                    to: contact.wanumber,
-                    template: template.name,
-                    language: { code: template.language },
-                    bodyParameters: []
-                };
-
-                // Add header if exists
-                if (template.header_type && template.header_content) {
-                    message.header = {
-                        type: template.header_type,
-                        content: template.header_content
+            for (const contact of contacts) {
+                try {
+                    // Prepare message components
+                    const message = {
+                        to: contact.wanumber,
+                        template: template.name,
+                        language: { code: template.language },
+                        bodyParameters: [] // Add your parameters here
                     };
-                }
 
-                // Map variables
-                if (template.variables) {
-                    const variableNames = Object.keys(template.variables);
-                    for (const varName of variableNames) {
-                        const fieldName = fieldMappings[varName];
-                        message.bodyParameters.push(
-                            fieldName && contact[fieldName] ?
-                            contact[fieldName] :
-                            template.variables[varName]
-                        );
+
+                    // Handle header if exists
+                    if (template.header_type && template.header_content) {
+                        message.header = {
+                            type: template.header_type,
+                            content: template.header_content
+                        };
+
+                        // For media headers, we expect header_content to be the media ID
+                        if (['image', 'video', 'document'].includes(template.header_type)) {
+                            message.header.mediaId = template.header_content;
+                        }
                     }
+
+                    // Map body variables to contact fields
+                    if (template.variables) {
+                        const variableNames = Object.keys(template.variables);
+                        for (const varName of variableNames) {
+                            const fieldName = fieldMappings[varName];
+                            if (fieldName && contact[fieldName]) {
+                                message.bodyParameters.push(contact[fieldName]);
+                            } else {
+                                // Use default sample if no mapping
+                                message.bodyParameters.push(template.variables[varName]);
+                            }
+                        }
+                    }
+
+
+
+                    // Send message
+                    const sendResult = await WhatsAppService.sendTemplateMessage(message);
+
+                    // Create message record
+                    await MessageController.createMessageRecord({
+                        messageId: sendResult.messageId,
+                        campaignId,
+                        contactId: contact.id,
+                        status: sendResult.status,
+                        error: sendResult.error,
+                        timestamp: sendResult.timestamp
+                    });
+
+                    // Update campaign stats
+                    await Campaign.incrementStats(campaignId, {
+                        delivered_count: sendResult.status === 'sent' ? 1 : 0,
+                        failed_count: sendResult.status === 'failed' ? 1 : 0
+                    });
+                } catch (error) {
+                    console.error('Error sending message:', error);
+                    await MessageController.createMessageRecord({
+                        messageId: `failed-${Date.now()}`,
+                        campaignId,
+                        contactId: contact.id,
+                        status: 'failed',
+                        error: error.message
+                    });
+                    await Campaign.incrementStats(campaignId, { failed_count: 1 });
                 }
-
-                // Send message
-                const sendResult = await WhatsAppService.sendTemplateMessage(message);
-
-                // Create message record
-                await MessageController.createMessageRecord({
-                    messageId: sendResult.messageId,
-                    campaignId,
-                    contactId: contact.id,
-                    status: sendResult.status,
-                    error: sendResult.error,
-                    timestamp: sendResult.timestamp
-                });
-
-                // Update campaign stats
-                await Campaign.incrementStats(campaignId, {
-                    delivered_count: sendResult.status === 'sent' ? 1 : 0,
-                    failed_count: sendResult.status === 'failed' ? 1 : 0
-                });
-            } catch (error) {
-                console.error('Error sending message:', error);
-                await MessageController.createMessageRecord({
-                    messageId: `failed-${Date.now()}`,
-                    campaignId,
-                    contactId: contact.id,
-                    status: 'failed',
-                    error: error.message
-                });
-                await Campaign.incrementStats(campaignId, { failed_count: 1 });
             }
         }
+        // controllers/messageController.js
+
+    static async saveDraft(req, res) {
+        try {
+            const {
+                templateId,
+                audience_type,
+                contacts,
+                fieldMappings,
+                scheduledAt = null
+            } = req.body;
+
+            const userId = 1; // Replace with actual user ID from auth
+
+            // Validate required fields
+            if (!templateId) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'Template ID is required'
+                });
+            }
+
+            if (!contacts || !Array.isArray(contacts) || contacts.length === 0) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'At least one contact is required'
+                });
+            }
+
+            // Create campaign as draft
+            const campaign = await Campaign.create({
+                name: `Bulk Send - ${new Date().toLocaleString()}`,
+                templateId,
+                status: 'draft',
+                scheduledAt,
+                userId,
+                contacts,
+                fieldMappings,
+                recipientCount: contacts.length
+            });
+
+            res.json({
+                success: true,
+                message: 'Draft saved successfully',
+                data: { campaignId: campaign.id }
+            });
+        } catch (error) {
+            console.error('Error saving draft:', error);
+            res.status(500).json({
+                success: false,
+                message: 'Failed to save draft',
+                error: error.message
+            });
+        }
     }
+
+    static async sendDraft(req, res) {
+        try {
+            const { id } = req.params;
+            const userId = 1; // Replace with actual user ID from auth
+
+            // Get the draft campaign
+            const campaign = await Campaign.getById(id, userId);
+            if (!campaign) {
+                return res.status(404).json({
+                    success: false,
+                    message: 'Draft campaign not found'
+                });
+            }
+
+            if (campaign.status !== 'draft') {
+                return res.status(400).json({
+                    success: false,
+                    message: 'Campaign is not in draft status'
+                });
+            }
+            let contacts;
+            let fieldMappings;
+            // Parse stored contacts and field mappings
+            try {
+                contacts = typeof campaign.contacts === 'string' ?
+                    JSON.parse(campaign.contacts) :
+                    campaign.contacts;
+
+                fieldMappings = typeof campaign.field_mappings === 'string' ?
+                    JSON.parse(campaign.field_mappings) :
+                    campaign.field_mappings;
+            } catch (parseError) {
+                console.error('Error parsing JSON:', parseError);
+                throw new Error('Invalid campaign data format');
+            }
+
+            // Update campaign status to sending
+            await Campaign.updateStatus(id, 'sending');
+
+            // Process messages
+            await MessageController.processCampaignMessages(
+                id,
+                contacts,
+                fieldMappings,
+                campaign.template_id,
+                userId
+            );
+
+            res.json({
+                success: true,
+                message: 'Draft campaign sent successfully'
+            });
+        } catch (error) {
+            console.error('Error sending draft:', error);
+            res.status(500).json({
+                success: false,
+                message: 'Failed to send draft',
+                error: error.message
+            });
+        }
+    }
+
 
 }
 

@@ -12,4 +12,10 @@ router.post('/send-bulk', MessageController.sendBulkMessages);
 router.get('/webhook', MessageController.verifyWebhook);
 router.post('/webhook', MessageController.handleWebhook);
 
+// routes/messageRoutes.js
+
+router.post('/save-draft', MessageController.saveDraft);
+router.post('/send-draft/:id', MessageController.sendDraft);
+
+
 module.exports = router;

@@ -619,3 +619,17 @@ input[type="checkbox"] {
 .info-alert p:first-child {
     font-weight: 500;
 }
+
+
+/* src/pages/SendMessage.css */
+
+.btn-outline-primary {
+    background: transparent;
+    border: 1px solid var(--primary-color);
+    color: var(--primary-color);
+}
+
+.btn-outline-primary:hover {
+    background: var(--primary-color);
+    color: white;
+}

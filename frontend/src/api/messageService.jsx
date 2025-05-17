@@ -35,7 +35,36 @@ export const messageService = {
       console.error('Error details:', error.response?.data);
       throw error.response?.data || error;
     }
-  }
+  },
+  saveDraft: async (payload) => {
+        try {
+            const response = await apiClient.post('/messages/save-draft', payload);
+            
+            if (!response.data.success) {
+                throw new Error(response.data.message || 'Failed to save draft');
+            }
+            
+            return response.data;
+        } catch (error) {
+            console.error('Error saving draft:', error.response?.data);
+            throw error.response?.data || error;
+        }
+    },
+
+    sendDraft: async (campaignId) => {
+        try {
+            const response = await apiClient.post(`/messages/send-draft/${campaignId}`);
+            
+            if (!response.data.success) {
+                throw new Error(response.data.message || 'Failed to send draft');
+            }
+            
+            return response.data;
+        } catch (error) {
+            console.error('Error sending draft:', error.response?.data);
+            throw error.response?.data || error;
+        }
+    }
 };
 
 

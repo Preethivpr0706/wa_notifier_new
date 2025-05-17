@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import { campaignService } from '../../api/campaignService';
 import './Campaigns.css';
+import { messageService } from '../../api/messageService';
 
 function Campaigns() {
   const navigate = useNavigate();
@@ -182,7 +183,18 @@ const getScheduledDisplay = (campaign) => {
   
   return `Scheduled for ${formatDate(campaign.scheduledAt)}`;
 };
-
+// Add the handler for sending drafts
+const handleSendDraft = async (campaignId) => {
+    try {
+        setIsLoading(true);
+        await messageService.sendDraft(campaignId);
+        await fetchCampaigns(); // Refresh the list
+    } catch (err) {
+        setError('Failed to send draft: ' + (err.message || 'Unknown error'));
+    } finally {
+        setIsLoading(false);
+    }
+};
   return (
     <div className="campaigns">
       <div className="page-header">
@@ -357,24 +369,23 @@ const getScheduledDisplay = (campaign) => {
                 </button>
                 
                 <div className="action-buttons">
-                  {campaign.status === 'scheduled' && (
-                    <button 
-                      className="action-btn play-btn"
-                      title="Send Now"
-                      onClick={() => navigate(`/campaigns/${campaign.id}/send`)}
-                    >
-                      <Play size={16} />
-                    </button>
-                  )}
                   
-                  {campaign.status === 'draft' && (
+                  {campaign.status === 'draft' && (<>
+<button 
+            className="action-btn play-btn"
+            title="Send Draft"
+            onClick={() => handleSendDraft(campaign.id)}
+            disabled={isLoading}
+        >
+            <Play size={16} />
+        </button>
                     <button 
                       className="action-btn edit-btn"
                       title="Edit Campaign"
                       onClick={() => navigate(`/campaigns/${campaign.id}/edit`)}
                     >
                       <Edit size={16} />
-                    </button>
+                    </button></>
                   )}
                   
                   {(campaign.status === 'draft' || campaign.status === 'scheduled') && (
