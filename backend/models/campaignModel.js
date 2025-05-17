@@ -2,6 +2,8 @@
 const { pool } = require('../config/database');
 const { v4: uuidv4 } = require('uuid');
 
+// models/campaignModel.js
+
 function determineCampaignStatus({ recipientCount, deliveredCount, failedCount }) {
     recipientCount = Number(recipientCount) || 0;
     deliveredCount = Number(deliveredCount) || 0;
@@ -9,14 +11,27 @@ function determineCampaignStatus({ recipientCount, deliveredCount, failedCount }
 
     const totalProcessed = deliveredCount + failedCount;
 
+    // If no recipients, it's a draft
     if (recipientCount === 0) return 'draft';
+
+    // If nothing processed yet and it's scheduled
     if (totalProcessed === 0) return 'scheduled';
-    if (totalProcessed < recipientCount) return 'sending';
+
+    // If all messages failed
     if (failedCount === recipientCount) return 'failed';
+
+    // If all messages delivered
     if (deliveredCount === recipientCount) return 'completed';
+
+    // If some messages failed and some delivered
     if (failedCount > 0 && deliveredCount > 0) return 'partial';
-    return 'sending';
+
+    // If still processing messages
+    if (totalProcessed < recipientCount) return 'sending';
+
+    return 'sending'; // Default case
 }
+
 class Campaign {
     // Create a new campaign
     // models/campaignModel.js
@@ -227,21 +242,36 @@ class Campaign {
         try {
             await connection.beginTransaction();
 
-            // Build update query dynamically
-            let updateQuery = 'UPDATE campaigns SET ';
-            const updateParts = [];
-            const params = [];
+            // First get current stats
+            const [current] = await connection.execute(
+                'SELECT recipient_count, delivered_count, failed_count FROM campaigns WHERE id = ?', [campaignId]
+            );
 
+            if (!current.length) throw new Error('Campaign not found');
+
+            // Update stats
+            const updates = [];
+            const params = [];
             for (const [field, value] of Object.entries(increments)) {
-                updateParts.push(`${field} = ${field} + ?`);
+                updates.push(`${field} = ${field} + ?`);
                 params.push(value);
             }
 
-            updateQuery += updateParts.join(', ');
-            updateQuery += ' WHERE id = ?';
-            params.push(campaignId);
+            await connection.execute(
+                `UPDATE campaigns SET ${updates.join(', ')} WHERE id = ?`, [...params, campaignId]
+            );
 
-            await connection.execute(updateQuery, params);
+            // Get updated stats
+            const [updated] = await connection.execute(
+                'SELECT recipient_count, delivered_count, failed_count FROM campaigns WHERE id = ?', [campaignId]
+            );
+
+            // Determine and update new status
+            const newStatus = determineCampaignStatus(updated[0]);
+            await connection.execute(
+                'UPDATE campaigns SET status = ? WHERE id = ?', [newStatus, campaignId]
+            );
+
             await connection.commit();
         } catch (error) {
             await connection.rollback();
@@ -250,6 +280,7 @@ class Campaign {
             connection.release();
         }
     }
+
 
     static async recalculateStatus(campaignId) {
         const connection = await pool.getConnection();
@@ -378,16 +409,62 @@ class Campaign {
 
     // Add method to start a scheduled campaign
     static async startScheduledCampaign(campaignId) {
+            const connection = await pool.getConnection();
+            try {
+                await connection.beginTransaction();
+
+                // Update campaign status to sending
+                await connection.execute(
+                    `UPDATE campaigns 
+       SET status = 'sending', 
+           sent_at = NOW() 
+       WHERE id = ?`, [campaignId]
+                );
+
+                await connection.commit();
+                return true;
+            } catch (error) {
+                await connection.rollback();
+                throw error;
+            } finally {
+                connection.release();
+            }
+        }
+        // models/campaignModel.js
+
+    static async update(campaignId, updateData) {
         const connection = await pool.getConnection();
         try {
             await connection.beginTransaction();
 
-            // Update campaign status to sending
+            const {
+                templateId,
+                scheduledAt,
+                fieldMappings
+            } = updateData;
+
+            // Format scheduledAt datetime
+            let formattedScheduledAt = null;
+            if (scheduledAt) {
+                formattedScheduledAt = new Date(scheduledAt)
+                    .toISOString()
+                    .slice(0, 19)
+                    .replace('T', ' ');
+            }
+
+            // Update campaign
             await connection.execute(
                 `UPDATE campaigns 
-       SET status = 'sending', 
-           sent_at = NOW() 
-       WHERE id = ?`, [campaignId]
+             SET template_id = ?,
+                 scheduled_at = ?,
+                 field_mappings = ?,
+                 updated_at = NOW()
+             WHERE id = ?`, [
+                    templateId,
+                    formattedScheduledAt,
+                    JSON.stringify(fieldMappings),
+                    campaignId
+                ]
             );
 
             await connection.commit();

@@ -49,5 +49,13 @@ export const campaignService = {
       } catch (error) {
         throw new Error(error.response?.data?.message || 'Failed to delete campaign');
       }
+    },
+     updateCampaign: async (id, data) => {
+        try {
+            const response = await apiClient.put(`/campaigns/${id}`, data);
+            return response.data;
+        } catch (error) {
+            throw new Error(error.response?.data?.message || 'Failed to update campaign');
+        }
     }
   };

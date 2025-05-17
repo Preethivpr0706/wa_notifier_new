@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { FileText, Users, Image, Video, Upload, BarChart3, Send, ChevronRight } from 'lucide-react';
+import { FileText, Users, Image, Video, Upload, BarChart3, Send, ChevronRight, AlertTriangle } from 'lucide-react';
 import FieldMapper from './FieldMapper';
 import { templateService } from '../../api/templateService';
 import { getContacts, getListsForSending } from '../../api/contactService';
@@ -23,21 +23,30 @@ function SendMessage() {
   const [csvFields, setCsvFields] = useState([]);
   const [csvData, setCsvData] = useState([]);
   const [fileName, setFileName] = useState([]);
-  // Add to your component's state
-const [validationErrors, setValidationErrors] = useState([]);
-const [successMessage, setSuccessMessage] = useState('');
-// Add to your state
-const [isDraftSaving, setIsDraftSaving] = useState(false);
+  const [validationErrors, setValidationErrors] = useState([]);
+  const [successMessage, setSuccessMessage] = useState('');
+  const [isDraftSaving, setIsDraftSaving] = useState(false);
+  // Form validation state
+  const [stepValidation, setStepValidation] = useState({
+    step1Valid: false,
+    step2Valid: false,
+    step3Valid: true, // Set to true by default since mapping may not be required
+    step4Valid: false
+  });
+  const [showValidationError, setShowValidationError] = useState(false);
+  
   const [formData, setFormData] = useState({
     templateId: '',
     audienceType: 'all',
     customAudience: '',
+    contactList: '',
     scheduledTime: '',
     scheduledDate: '',
     sendNow: true,
     fieldMappings: {}
   });
  const fileInputRef = useRef(null);
+  
   // Fetch templates and contacts
   useEffect(() => {
     const fetchData = async () => {
@@ -46,7 +55,7 @@ const [isDraftSaving, setIsDraftSaving] = useState(false);
         const [templatesRes, contactsRes, listsRes] = await Promise.all([
           templateService.getTemplates({ status: 'approved' }),
           getContacts(),
-          getListsForSending() // You'll need to implement this API call
+          getListsForSending() 
         ]);
         
         setTemplates(templatesRes.data?.templates || []);
@@ -61,61 +70,134 @@ const [isDraftSaving, setIsDraftSaving] = useState(false);
     
     fetchData();
   }, []);
-  const handleFileUpload = (e) => {
-  const file = e.target.files[0];
-  if (!file) return;
 
-  setFileName(file.name);
-  setValidationErrors([]);
-  setSuccessMessage('');
+  // Validate each step when data changes
+  useEffect(() => {
+    validateStep1();
+    validateStep2();
+    validateStep4();
+  }, [formData, csvData, contacts]);
 
-  Papa.parse(file, {
-    header: true,
-    skipEmptyLines: true,
-    complete: (results) => {
-      const { data, errors } = results;
-      
-      if (errors.length > 0) {
-        setValidationErrors(errors.map(err => err.message));
-        return;
-      }
+  // Step 1 validation: Template selection
+  const validateStep1 = () => {
+    const isValid = !!formData.templateId;
+    setStepValidation(prev => ({ ...prev, step1Valid: isValid }));
+    return isValid;
+  };
 
-      // Validate required fields
-      const requiredFields = ['wanumber'];
-      const validationErrors = [];
-      const validData = data.filter(row => {
-        const hasAllFields = requiredFields.every(field => row[field]);
-        if (!hasAllFields) {
-          validationErrors.push(`Row missing required field(s)`);
-        }
-        return hasAllFields;
-      });
-
-      if (validationErrors.length > 0) {
-        setValidationErrors(validationErrors);
-        return;
-      }
-
-      // Transform data to match expected contact structure
-      const transformedData = validData.map(row => ({
-        id: row.id || `csv-${Math.random().toString(36).substr(2, 9)}`,
-        wanumber: row.wanumber,
-        fname: row.fname || '',
-        lname: row.lname || '',
-        email: row.email || '',
-        list_id: row.list_id || null,
-        list_name: row.list_name || 'CSV Import'
-      }));
-
-      setCsvFields(Object.keys(data[0]));
-      setCsvData(transformedData);
-      setSuccessMessage(`Successfully loaded ${transformedData.length} contacts`);
-    },
-    error: (error) => {
-      setValidationErrors([`Error parsing CSV: ${error.message}`]);
+  // Step 2 validation: Audience selection
+  const validateStep2 = () => {
+    let isValid = false;
+    
+    if (formData.audienceType === 'all') {
+      isValid = contacts.length > 0;
+    } else if (formData.audienceType === 'list') {
+      isValid = !!formData.contactList;
+    } else if (formData.audienceType === 'custom') {
+      isValid = csvData.length > 0;
     }
-  });
-};
+    
+    setStepValidation(prev => ({ ...prev, step2Valid: isValid }));
+    return isValid;
+  };
+
+  // Step 4 validation: Scheduling
+  const validateStep4 = () => {
+    let isValid = true;
+    
+    if (!formData.sendNow) {
+      isValid = !!formData.scheduledDate && !!formData.scheduledTime;
+    }
+    
+    setStepValidation(prev => ({ ...prev, step4Valid: isValid }));
+    return isValid;
+  };
+
+  // Handler for proceeding to next step
+  const goToNextStep = (currentStep) => {
+    setShowValidationError(false);
+    
+    switch(currentStep) {
+      case 1:
+        if (validateStep1()) {
+          setStep(2);
+        } else {
+          setShowValidationError(true);
+        }
+        break;
+      case 2:
+        if (validateStep2()) {
+          setStep(3);
+        } else {
+          setShowValidationError(true);
+        }
+        break;
+      case 3:
+        // We'll always allow proceeding from step 3 as field mapping might be optional
+        setStep(4);
+        break;
+      default:
+        break;
+    }
+  };
+
+  const handleFileUpload = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    setFileName(file.name);
+    setValidationErrors([]);
+    setSuccessMessage('');
+    setShowValidationError(false);
+
+    Papa.parse(file, {
+      header: true,
+      skipEmptyLines: true,
+      complete: (results) => {
+        const { data, errors } = results;
+        
+        if (errors.length > 0) {
+          setValidationErrors(errors.map(err => err.message));
+          return;
+        }
+
+        // Validate required fields
+        const requiredFields = ['wanumber'];
+        const validationErrors = [];
+        const validData = data.filter(row => {
+          const hasAllFields = requiredFields.every(field => row[field]);
+          if (!hasAllFields) {
+            validationErrors.push(`Row missing required field(s)`);
+          }
+          return hasAllFields;
+        });
+
+        if (validationErrors.length > 0) {
+          setValidationErrors(validationErrors);
+          return;
+        }
+
+        // Transform data to match expected contact structure
+        const transformedData = validData.map(row => ({
+          id: row.id || `csv-${Math.random().toString(36).substr(2, 9)}`,
+          wanumber: row.wanumber,
+          fname: row.fname || '',
+          lname: row.lname || '',
+          email: row.email || '',
+          list_id: row.list_id || null,
+          list_name: row.list_name || 'CSV Import'
+        }));
+
+        setCsvFields(Object.keys(data[0]));
+        setCsvData(transformedData);
+        setSuccessMessage(`Successfully loaded ${transformedData.length} contacts`);
+        validateStep2(); // Re-validate step 2 after loading CSV
+      },
+      error: (error) => {
+        setValidationErrors([`Error parsing CSV: ${error.message}`]);
+      }
+    });
+  };
 
   const handleInputChange = (e) => {
     const { name, value, type, checked } = e.target;
@@ -133,126 +215,130 @@ const [isDraftSaving, setIsDraftSaving] = useState(false);
     }));
   };
 
-  // In the handleMediaUpload function
-// In the handleMediaUpload function
-const handleMediaUpload = async (file) => {
-  try {
-    setIsLoading(true);
-    setUploadProgress(0);
-    
-    // Use templateService instead of direct axios call
-    const response = await templateService.uploadMediaToWhatsApp(
-      file,
-      formData.templateId,
-      selectedTemplate.header_type
-    );
-
-    setSelectedMedia({
-      id: response.whatsappMediaId,
-      type: file.type.startsWith('image') ? 'image' : 'video',
-      name: file.name
-    });
-    
-    setShowMediaUpload(false);
-  } catch (err) {
-    setError('Failed to upload media: ' + (err.response?.data?.message || err.message));
-  } finally {
-    setIsLoading(false);
-    setUploadProgress(0);
-  }
-};
-
-const handleSubmit = async (e) => {
-  e.preventDefault();
-  
-  try {
-    setIsLoading(true);
-    
-    let targetContacts = [];
-    
-    if (formData.audienceType === 'all') {
-      targetContacts = contacts;
-    } 
-    else if (formData.audienceType === 'list') {
-      targetContacts = contacts.filter(c => c.list_id === formData.contactList);
-    }
-    else if (formData.audienceType === 'custom') {
-      targetContacts = csvData;
-    }
-    
-    // Ensure audienceType is lowercase to match backend expectations
-    const payload = {
-      templateId: formData.templateId,
-      audience_type: formData.audienceType.toLowerCase(), // Convert to lowercase
-      contacts: targetContacts.map(c => ({
-        id: c.id,
-        wanumber: c.wanumber,
-        fname: c.fname || '',
-        lname: c.lname || '',
-        email: c.email || '',
-        list_id: c.list_id || null
-      })),
-      fieldMappings: formData.fieldMappings,
-      sendNow: formData.sendNow,
-      scheduledAt: formData.sendNow ? null : 
-        `${formData.scheduledDate}T${formData.scheduledTime}:00Z`,
-      list_id: formData.audienceType === 'list' ? formData.contactList : null,
-      is_custom: formData.audienceType === 'custom'
-    };
-
-    console.log('Sending payload:', payload); // Debug log
-    const response = await messageService.sendBulkMessages(payload);
-    navigate('/campaigns', { 
-      state: { success: 'Messages sent successfully!' } 
-    });
-  } catch (err) {
-    const errorMsg = err.response?.data?.message || err.message || 'Failed to send messages';
-    setError(errorMsg);
-    console.error('Send error:', err.response?.data || err);
-  } finally {
-    setIsLoading(false);
-  }
-};
-// Add the save draft handler
-const handleSaveAsDraft = async () => {
+  const handleMediaUpload = async (file) => {
     try {
-        setIsDraftSaving(true);
-        
-        let targetContacts = [];
-        if (formData.audienceType === 'all') {
-            targetContacts = contacts;
-        } else if (formData.audienceType === 'list') {
-            targetContacts = contacts.filter(c => c.list_id === formData.contactList);
-        } else if (formData.audienceType === 'custom') {
-            targetContacts = csvData;
-        }
-        
-        const payload = {
-            templateId: formData.templateId,
-            audience_type: formData.audienceType.toLowerCase(),
-            contacts: targetContacts.map(c => ({
-                id: c.id,
-                wanumber: c.wanumber,
-                fname: c.fname || '',
-                lname: c.lname || '',
-                email: c.email || '',
-                list_id: c.list_id || null
-            })),
-            fieldMappings: formData.fieldMappings,
-            scheduledAt: formData.sendNow ? null : 
-                `${formData.scheduledDate}T${formData.scheduledTime}:00Z`
-        };
+      setIsLoading(true);
+      setUploadProgress(0);
+      
+      // Use templateService instead of direct axios call
+      const response = await templateService.uploadMediaToWhatsApp(
+        file,
+        formData.templateId,
+        selectedTemplate.header_type
+      );
 
-        await messageService.saveDraft(payload);
-        navigate('/campaigns', { 
-            state: { success: 'Campaign saved as draft!' } 
-        });
+      setSelectedMedia({
+        id: response.whatsappMediaId,
+        type: file.type.startsWith('image') ? 'image' : 'video',
+        name: file.name
+      });
+      
+      setShowMediaUpload(false);
     } catch (err) {
-        setError('Failed to save draft: ' + (err.message || 'Unknown error'));
+      setError('Failed to upload media: ' + (err.response?.data?.message || err.message));
     } finally {
-        setIsDraftSaving(false);
+      setIsLoading(false);
+      setUploadProgress(0);
     }
-};
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    
+    // Final validation before submission
+    if (!validateStep4()) {
+      setShowValidationError(true);
+      return;
+    }
+    
+    try {
+      setIsLoading(true);
+      
+      let targetContacts = [];
+      
+      if (formData.audienceType === 'all') {
+        targetContacts = contacts;
+      } 
+      else if (formData.audienceType === 'list') {
+        targetContacts = contacts.filter(c => c.list_id === formData.contactList);
+      }
+      else if (formData.audienceType === 'custom') {
+        targetContacts = csvData;
+      }
+      
+      // Ensure audienceType is lowercase to match backend expectations
+      const payload = {
+        templateId: formData.templateId,
+        audience_type: formData.audienceType.toLowerCase(), // Convert to lowercase
+        contacts: targetContacts.map(c => ({
+          id: c.id,
+          wanumber: c.wanumber,
+          fname: c.fname || '',
+          lname: c.lname || '',
+          email: c.email || '',
+          list_id: c.list_id || null
+        })),
+        fieldMappings: formData.fieldMappings,
+        sendNow: formData.sendNow,
+        scheduledAt: formData.sendNow ? null : 
+          `${formData.scheduledDate}T${formData.scheduledTime}:00Z`,
+        list_id: formData.audienceType === 'list' ? formData.contactList : null,
+        is_custom: formData.audienceType === 'custom'
+      };
+
+      console.log('Sending payload:', payload); // Debug log
+      const response = await messageService.sendBulkMessages(payload);
+      navigate('/campaigns', { 
+        state: { success: 'Messages sent successfully!' } 
+      });
+    } catch (err) {
+      const errorMsg = err.response?.data?.message || err.message || 'Failed to send messages';
+      setError(errorMsg);
+      console.error('Send error:', err.response?.data || err);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleSaveAsDraft = async () => {
+    try {
+      setIsDraftSaving(true);
+      
+      let targetContacts = [];
+      if (formData.audienceType === 'all') {
+        targetContacts = contacts;
+      } else if (formData.audienceType === 'list') {
+        targetContacts = contacts.filter(c => c.list_id === formData.contactList);
+      } else if (formData.audienceType === 'custom') {
+        targetContacts = csvData;
+      }
+      
+      const payload = {
+        templateId: formData.templateId,
+        audience_type: formData.audienceType.toLowerCase(),
+        contacts: targetContacts.map(c => ({
+          id: c.id,
+          wanumber: c.wanumber,
+          fname: c.fname || '',
+          lname: c.lname || '',
+          email: c.email || '',
+          list_id: c.list_id || null
+        })),
+        fieldMappings: formData.fieldMappings,
+        scheduledAt: formData.sendNow ? null : 
+          `${formData.scheduledDate}T${formData.scheduledTime}:00Z`
+      };
+
+      await messageService.saveDraft(payload);
+      navigate('/campaigns', { 
+        state: { success: 'Campaign saved as draft!' } 
+      });
+    } catch (err) {
+      setError('Failed to save draft: ' + (err.message || 'Unknown error'));
+    } finally {
+      setIsDraftSaving(false);
+    }
+  };
 
   const selectedTemplate = templates.find(t => t.id === formData.templateId);
   const contactFields = contacts.length > 0 ? Object.keys(contacts[0]) : [];
@@ -283,6 +369,7 @@ const handleSaveAsDraft = async () => {
       </div>
       
       {error && <div className="error-alert">{error}</div>}
+      {successMessage && <div className="success-alert">{successMessage}</div>}
       
       <form onSubmit={handleSubmit}>
         {/* Step 1: Template Selection */}
@@ -293,6 +380,13 @@ const handleSaveAsDraft = async () => {
               <span>Select Template</span>
             </h3>
             
+            {showValidationError && !stepValidation.step1Valid && (
+              <div className="validation-error">
+                <AlertTriangle size={16} />
+                <span>Please select a template before proceeding.</span>
+              </div>
+            )}
+            
             <div className="form-field">
               <label htmlFor="templateId">Message Template</label>
               <select
@@ -301,6 +395,7 @@ const handleSaveAsDraft = async () => {
                 value={formData.templateId}
                 onChange={handleInputChange}
                 required
+                className={showValidationError && !formData.templateId ? 'error' : ''}
               >
                 <option value="">Select a template</option>
                 {templates.map(template => (
@@ -369,8 +464,7 @@ const handleSaveAsDraft = async () => {
               <button
                 type="button"
                 className="btn btn-primary"
-                onClick={() => setStep(2)}
-                disabled={!formData.templateId}
+                onClick={() => goToNextStep(1)}
               >
                 Next
               </button>
@@ -380,154 +474,178 @@ const handleSaveAsDraft = async () => {
         
          {/* Step 2: Audience Selection */}
          {step === 2 && (
-  <div className="form-step card">
-    <h3 className="section-title">
-      <Users size={18} />
-      <span>Select Audience</span>
-    </h3>
-    
-    <div className="form-field">
-      <label>Audience Type</label>
-      <div className="radio-group">
-        <label>
-          <input
-            type="radio"
-            name="audienceType"
-            value="all"
-            checked={formData.audienceType === 'all'}
-            onChange={handleInputChange}
-          />
-          All Contacts ({contacts.length})
-        </label>
-        
-        <label>
-          <input
-            type="radio"
-            name="audienceType"
-            value="list"
-            checked={formData.audienceType === 'list'}
-            onChange={handleInputChange}
-          />
-          Select from Existing Lists
-        </label>
-        
-        <label>
-          <input
-            type="radio"
-            name="audienceType"
-            value="custom"
-            checked={formData.audienceType === 'custom'}
-            onChange={handleInputChange}
-          />
-          Upload Custom CSV
-        </label>
-      </div>
-    </div>
-    
-    {formData.audienceType === 'list' && (
-      <div className="form-field">
-        <label htmlFor="contactList">Select Contact List</label>
-        <select
-          id="contactList"
-          name="contactList"
-          value={formData.contactList}
-          onChange={handleInputChange}
-        >
-          <option value="">Select a list</option>
-          {contactLists.map(list => (
-            <option key={list.id} value={list.id}>
-              {list.name} ({list.contactCount || 0} contacts)
-            </option>
-          ))}
-        </select>
-      </div>
-    )}
-    
-    {formData.audienceType === 'custom' && (
-      <div className="form-field">
-        <label htmlFor="customAudience">Upload CSV File</label>
-        <input
-          type="file"
-          id="customAudience"
-          name="customAudience"
-          accept=".csv"
-          onChange={handleFileUpload}
-          ref={fileInputRef}
-        />
-        {csvFields.length > 0 && (
-          <div className="csv-preview">
-            <p>Detected fields in CSV: {csvFields.join(', ')}</p>
+          <div className="form-step card">
+            <h3 className="section-title">
+              <Users size={18} />
+              <span>Select Audience</span>
+            </h3>
+            
+            {showValidationError && !stepValidation.step2Valid && (
+              <div className="validation-error">
+                <AlertTriangle size={16} />
+                <span>{
+                  formData.audienceType === 'list' 
+                    ? 'Please select a contact list before proceeding.' 
+                    : formData.audienceType === 'custom' 
+                      ? 'Please upload a valid CSV file with contacts.' 
+                      : 'Please ensure you have contacts available.'
+                }</span>
+              </div>
+            )}
+            
+            <div className="form-field">
+              <label>Audience Type</label>
+              <div className="radio-group">
+                <label>
+                  <input
+                    type="radio"
+                    name="audienceType"
+                    value="all"
+                    checked={formData.audienceType === 'all'}
+                    onChange={handleInputChange}
+                  />
+                  All Contacts ({contacts.length})
+                </label>
+                
+                <label>
+                  <input
+                    type="radio"
+                    name="audienceType"
+                    value="list"
+                    checked={formData.audienceType === 'list'}
+                    onChange={handleInputChange}
+                  />
+                  Select from Existing Lists
+                </label>
+                
+                <label>
+                  <input
+                    type="radio"
+                    name="audienceType"
+                    value="custom"
+                    checked={formData.audienceType === 'custom'}
+                    onChange={handleInputChange}
+                  />
+                  Upload Custom CSV
+                </label>
+              </div>
+            </div>
+            
+            {formData.audienceType === 'list' && (
+              <div className="form-field">
+                <label htmlFor="contactList">Select Contact List</label>
+                <select
+                  id="contactList"
+                  name="contactList"
+                  value={formData.contactList}
+                  onChange={handleInputChange}
+                  className={showValidationError && !formData.contactList ? 'error' : ''}
+                >
+                  <option value="">Select a list</option>
+                  {contactLists.map(list => (
+                    <option key={list.id} value={list.id}>
+                      {list.name} ({list.contactCount || 0} contacts)
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+            
+            {formData.audienceType === 'custom' && (
+              <div className="form-field">
+                <label htmlFor="customAudience">Upload CSV File</label>
+                <input
+                  type="file"
+                  id="customAudience"
+                  name="customAudience"
+                  accept=".csv"
+                  onChange={handleFileUpload}
+                  ref={fileInputRef}
+                  className={showValidationError && csvData.length === 0 ? 'error' : ''}
+                />
+                {fileName && <div className="file-name">Selected file: {fileName}</div>}
+                
+                {validationErrors.length > 0 && (
+                  <div className="error-list">
+                    <h4>CSV Validation Errors:</h4>
+                    <ul>
+                      {validationErrors.map((err, index) => (
+                        <li key={index}>{err}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+                
+                {csvFields.length > 0 && (
+                  <div className="csv-preview">
+                    <p>Detected fields in CSV: {csvFields.join(', ')}</p>
+                    <p>Loaded {csvData.length} valid contacts.</p>
+                  </div>
+                )}
+              </div>
+            )}
+            
+            <div className="step-actions">
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={() => setStep(1)}
+              >
+                Back
+              </button>
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={() => goToNextStep(2)}
+              >
+                Next
+              </button>
+            </div>
           </div>
         )}
-      </div>
-    )}
-    
-    <div className="step-actions">
-      <button
-        type="button"
-        className="btn btn-secondary"
-        onClick={() => setStep(1)}
-      >
-        Back
-      </button>
-      <button
-        type="button"
-        className="btn btn-primary"
-        onClick={() => setStep(3)}
-        disabled={
-          (formData.audienceType === 'list' && !formData.contactList) ||
-          (formData.audienceType === 'custom' && csvData.length === 0)
-        }
-      >
-        Next
-      </button>
-    </div>
-  </div>
-)}
         
        {/* Step 3: Field Mapping */}
-{step === 3 && selectedTemplate && (
-  <div className="form-step card">
-    <h3 className="section-title">
-      <span>Map Template Variables</span>
-    </h3>
-    
-    {extractVariables(selectedTemplate.body_text).length > 0 ? (
-      // Show FieldMapper only if variables exist
-      <FieldMapper
-        templateVariables={extractVariables(selectedTemplate.body_text)}
-        contactFields={formData.audienceType === 'custom' ? csvFields : contactFields}
-        onMappingChange={handleMappingChange}
-      />
-    ) : (
-      // Show message when no variables exist
-      <div className="no-variables-message">
-        <div className="info-alert">
-          <p>This template doesn't contain any variables to map.</p>
-          <p>You can proceed to the next step.</p>
-        </div>
-      </div>
-    )}
-    
-    <div className="step-actions">
-      <button
-        type="button"
-        className="btn btn-secondary"
-        onClick={() => setStep(2)}
-      >
-        Back
-      </button>
-      <button
-        type="button"
-        className="btn btn-primary"
-        onClick={() => setStep(4)}
-      >
-        Next
-      </button>
-    </div>
-  </div>
-)}
-
+        {step === 3 && selectedTemplate && (
+          <div className="form-step card">
+            <h3 className="section-title">
+              <span>Map Template Variables</span>
+            </h3>
+            
+            {extractVariables(selectedTemplate.body_text).length > 0 ? (
+              // Show FieldMapper only if variables exist
+              <FieldMapper
+                templateVariables={extractVariables(selectedTemplate.body_text)}
+                contactFields={formData.audienceType === 'custom' ? csvFields : contactFields}
+                onMappingChange={handleMappingChange}
+              />
+            ) : (
+              // Show message when no variables exist
+              <div className="no-variables-message">
+                <div className="info-alert">
+                  <p>This template doesn't contain any variables to map.</p>
+                  <p>You can proceed to the next step.</p>
+                </div>
+              </div>
+            )}
+            
+            <div className="step-actions">
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={() => setStep(2)}
+              >
+                Back
+              </button>
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={() => goToNextStep(3)}
+              >
+                Next
+              </button>
+            </div>
+          </div>
+        )}
         
         {/* Step 4: Send Options */}
         {step === 4 && (
@@ -536,6 +654,13 @@ const handleSaveAsDraft = async () => {
               <BarChart3 size={18} />
               <span>Delivery Options</span>
             </h3>
+            
+            {showValidationError && !stepValidation.step4Valid && (
+              <div className="validation-error">
+                <AlertTriangle size={16} />
+                <span>Please select both date and time for scheduled delivery.</span>
+              </div>
+            )}
             
             <div className="form-field checkbox-field">
               <label>
@@ -561,6 +686,7 @@ const handleSaveAsDraft = async () => {
                     onChange={handleInputChange}
                     min={new Date().toISOString().split('T')[0]}
                     required={!formData.sendNow}
+                    className={showValidationError && !formData.scheduledDate && !formData.sendNow ? 'error' : ''}
                   />
                 </div>
                 
@@ -573,6 +699,7 @@ const handleSaveAsDraft = async () => {
                     value={formData.scheduledTime}
                     onChange={handleInputChange}
                     required={!formData.sendNow}
+                    className={showValidationError && !formData.scheduledTime && !formData.sendNow ? 'error' : ''}
                   />
                 </div>
               </div>
@@ -581,10 +708,19 @@ const handleSaveAsDraft = async () => {
             <div className="summary-section">
               <h4>Summary</h4>
               <p><strong>Template:</strong> {selectedTemplate?.name}</p>
-              <p><strong>Audience:</strong> {formData.audienceType === 'all' ? 
-                `All Contacts (${contacts.length})` : 'Custom List'}</p>
-              <p><strong>Delivery:</strong> {formData.sendNow ? 
-                'Immediate' : 'Scheduled'}</p>
+              <p><strong>Audience:</strong> {
+                formData.audienceType === 'all' 
+                  ? `All Contacts (${contacts.length})` 
+                  : formData.audienceType === 'list'
+                    ? `Contact List: ${contactLists.find(l => l.id === formData.contactList)?.name || 'Unknown'}`
+                    : `Custom CSV (${csvData.length} contacts)`
+              }</p>
+              <p><strong>Delivery:</strong> {formData.sendNow 
+                ? 'Immediate' 
+                : formData.scheduledDate && formData.scheduledTime
+                  ? `Scheduled for ${formData.scheduledDate} at ${formData.scheduledTime}`
+                  : 'Scheduled (incomplete)'
+              }</p>
             </div>
             
             <div className="step-actions">
@@ -595,15 +731,16 @@ const handleSaveAsDraft = async () => {
               >
                 Back
               </button>
-                 
-      {/* Add Save as Draft button */}
-      <button
-        type="button"
-        className="btn btn-outline-primary"
-        onClick={() => handleSaveAsDraft()}
-        disabled={isLoading || isDraftSaving}
-      >{isDraftSaving ? 'Saving...' : 'Save as Draft'}
-            </button>
+                   
+              <button
+                type="button"
+                className="btn btn-outline-primary"
+                onClick={handleSaveAsDraft}
+                disabled={isLoading || isDraftSaving}
+              >
+                {isDraftSaving ? 'Saving...' : 'Save as Draft'}
+              </button>
+              
               <button
                 type="submit"
                 className="btn btn-primary"
@@ -628,7 +765,6 @@ const handleSaveAsDraft = async () => {
   );
 }
 
- 
 // Helper function to extract variables from template text
 function extractVariables(text) {
   if (!text) return [];

@@ -239,6 +239,44 @@ class CampaignController {
             });
         }
     }
+    static async updateCampaign(req, res) {
+        try {
+            const { id } = req.params;
+            const userId = 1; // Replace with actual user ID from auth
+            const updateData = req.body;
+
+            // Verify campaign exists and belongs to user
+            const campaign = await Campaign.getById(id, userId);
+            if (!campaign) {
+                return res.status(404).json({
+                    success: false,
+                    message: 'Campaign not found'
+                });
+            }
+
+            if (campaign.status !== 'draft') {
+                return res.status(400).json({
+                    success: false,
+                    message: 'Only draft campaigns can be edited'
+                });
+            }
+
+            // Update campaign
+            await Campaign.update(id, updateData);
+
+            res.json({
+                success: true,
+                message: 'Campaign updated successfully'
+            });
+        } catch (error) {
+            console.error('Error updating campaign:', error);
+            res.status(500).json({
+                success: false,
+                message: 'Failed to update campaign',
+                error: error.message
+            });
+        }
+    }
 }
 
 module.exports = CampaignController;

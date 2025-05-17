@@ -13,6 +13,7 @@ import EditTemplate from './components/EditTemplate/EditTemplate';
 import ImportContacts from './components/Contact/ImportContacts';
 import ContactLists from './components/Contact/ContactLists';
 import CampaignDetails from './components/Campaigns/CampaignDetails';
+import EditCampaign from './components/SendMessage/EditCampaign';
 function App() {
   const [sidebarOpen, setSidebarOpen] = useState(true);
 
@@ -37,6 +38,7 @@ function App() {
             <Route path="/contacts/import" element={<ImportContacts/>}/>
             <Route path="/contacts/list" element={<ContactLists />} />
             <Route path="/campaigns/:id" element={<CampaignDetails />} />
+            <Route path="/campaigns/:id/edit" element={<EditCampaign />} />
          </Routes>
         </div>
       </div>
