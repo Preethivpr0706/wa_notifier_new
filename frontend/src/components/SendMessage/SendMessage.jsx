@@ -30,7 +30,7 @@ function SendMessage() {
   const [stepValidation, setStepValidation] = useState({
     step1Valid: false,
     step2Valid: false,
-    step3Valid: true, // Set to true by default since mapping may not be required
+    step3Valid: false, // Initialize as false - we'll validate based on whether required fields are mapped
     step4Valid: false
   });
   const [showValidationError, setShowValidationError] = useState(false);
@@ -45,7 +45,7 @@ function SendMessage() {
     sendNow: true,
     fieldMappings: {}
   });
- const fileInputRef = useRef(null);
+  const fileInputRef = useRef(null);
   
   // Fetch templates and contacts
   useEffect(() => {
@@ -75,6 +75,7 @@ function SendMessage() {
   useEffect(() => {
     validateStep1();
     validateStep2();
+    validateStep3(); // Add step 3 validation
     validateStep4();
   }, [formData, csvData, contacts]);
 
@@ -99,6 +100,32 @@ function SendMessage() {
     
     setStepValidation(prev => ({ ...prev, step2Valid: isValid }));
     return isValid;
+  };
+
+  // Step 3 validation: Field Mapping
+  const validateStep3 = () => {
+    // If selected template doesn't exist yet, can't validate
+    if (!formData.templateId) return false;
+    
+    const selectedTemplate = templates.find(t => t.id === formData.templateId);
+    if (!selectedTemplate) return false;
+    
+    // Extract template variables
+    const templateVariables = extractVariables(selectedTemplate.body_text);
+    
+    // If no variables exist, validation passes automatically
+    if (templateVariables.length === 0) {
+      setStepValidation(prev => ({ ...prev, step3Valid: true }));
+      return true;
+    }
+    
+    // Check if all required variables are mapped
+    const allVariablesMapped = templateVariables.every(variable => 
+      formData.fieldMappings[variable] && formData.fieldMappings[variable] !== ''
+    );
+    
+    setStepValidation(prev => ({ ...prev, step3Valid: allVariablesMapped }));
+    return allVariablesMapped;
   };
 
   // Step 4 validation: Scheduling
@@ -133,8 +160,11 @@ function SendMessage() {
         }
         break;
       case 3:
-        // We'll always allow proceeding from step 3 as field mapping might be optional
-        setStep(4);
+        if (validateStep3()) {
+          setStep(4);
+        } else {
+          setShowValidationError(true);
+        }
         break;
       default:
         break;
@@ -213,6 +243,8 @@ function SendMessage() {
       ...prev,
       fieldMappings: mappings
     }));
+    // Validate step 3 when mappings change
+    setTimeout(validateStep3, 0);
   };
 
   const handleMediaUpload = async (file) => {
@@ -611,12 +643,20 @@ function SendMessage() {
               <span>Map Template Variables</span>
             </h3>
             
+            {showValidationError && !stepValidation.step3Valid && (
+              <div className="validation-error">
+                <AlertTriangle size={16} />
+                <span>Please map all template variables before proceeding.</span>
+              </div>
+            )}
+            
             {extractVariables(selectedTemplate.body_text).length > 0 ? (
               // Show FieldMapper only if variables exist
               <FieldMapper
                 templateVariables={extractVariables(selectedTemplate.body_text)}
                 contactFields={formData.audienceType === 'custom' ? csvFields : contactFields}
                 onMappingChange={handleMappingChange}
+                initialMappings={formData.fieldMappings} // Pass current mappings
               />
             ) : (
               // Show message when no variables exist
