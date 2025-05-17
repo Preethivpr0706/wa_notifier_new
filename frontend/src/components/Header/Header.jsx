@@ -37,7 +37,7 @@ function Header({ toggleSidebar }) {
       case '/campaigns':
         return {
           text: 'Create Campaign',
-          path: '/campaigns/create',
+          path: '/send-message',
           icon: <PlusCircle size={16} />
         };
       default:

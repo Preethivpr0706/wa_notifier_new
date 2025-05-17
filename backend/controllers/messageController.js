@@ -100,131 +100,136 @@ class MessageController {
 
                 // Create campaign record
                 // Create campaign record with initial counts
+                // Create campaign with appropriate status
+                // In MessageController.sendBulkMessages
+
                 const campaign = await Campaign.create({
                     name: `Bulk Send - ${new Date().toLocaleString()}`,
                     templateId,
-                    status: 'sending', // Set to sending immediately
-                    scheduledAt: scheduledAt || null,
+                    status: sendNow ? 'sending' : 'scheduled',
+                    scheduledAt: sendNow ? null : scheduledAt,
                     userId,
+                    contacts: targetContacts, // Add these
+                    fieldMappings, // Add these
                     recipientCount: targetContacts.length,
                     deliveredCount: 0,
                     failedCount: 0,
                     readCount: 0
                 });
+                if (sendNow) {
+                    const results = {
+                        total: targetContacts.length,
+                        success: 0,
+                        failures: 0,
+                        errors: []
+                    };
+                    // Process each contact
+                    for (const contact of targetContacts) {
+                        try {
+                            if (!contact || typeof contact !== 'object' || !contact.wanumber) {
+                                throw new Error('Invalid contact format');
+                            }
 
-                const results = {
-                    total: targetContacts.length,
-                    success: 0,
-                    failures: 0,
-                    errors: []
-                };
-                // Process each contact
-                for (const contact of targetContacts) {
-                    try {
-                        if (!contact || typeof contact !== 'object' || !contact.wanumber) {
-                            throw new Error('Invalid contact format');
-                        }
-
-                        // Prepare message components
-                        const message = {
-                            to: contact.wanumber,
-                            template: template.name,
-                            language: { code: template.language },
-                            bodyParameters: [] // Add your parameters here
-                        };
-
-
-                        // Handle header if exists
-                        if (template.header_type && template.header_content) {
-                            message.header = {
-                                type: template.header_type,
-                                content: template.header_content
+                            // Prepare message components
+                            const message = {
+                                to: contact.wanumber,
+                                template: template.name,
+                                language: { code: template.language },
+                                bodyParameters: [] // Add your parameters here
                             };
 
-                            // For media headers, we expect header_content to be the media ID
-                            if (['image', 'video', 'document'].includes(template.header_type)) {
-                                message.header.mediaId = template.header_content;
-                            }
-                        }
 
-                        // Map body variables to contact fields
-                        if (template.variables) {
-                            const variableNames = Object.keys(template.variables);
-                            for (const varName of variableNames) {
-                                const fieldName = fieldMappings[varName];
-                                if (fieldName && contact[fieldName]) {
-                                    message.bodyParameters.push(contact[fieldName]);
-                                } else {
-                                    // Use default sample if no mapping
-                                    message.bodyParameters.push(template.variables[varName]);
+                            // Handle header if exists
+                            if (template.header_type && template.header_content) {
+                                message.header = {
+                                    type: template.header_type,
+                                    content: template.header_content
+                                };
+
+                                // For media headers, we expect header_content to be the media ID
+                                if (['image', 'video', 'document'].includes(template.header_type)) {
+                                    message.header.mediaId = template.header_content;
                                 }
                             }
+
+                            // Map body variables to contact fields
+                            if (template.variables) {
+                                const variableNames = Object.keys(template.variables);
+                                for (const varName of variableNames) {
+                                    const fieldName = fieldMappings[varName];
+                                    if (fieldName && contact[fieldName]) {
+                                        message.bodyParameters.push(contact[fieldName]);
+                                    } else {
+                                        // Use default sample if no mapping
+                                        message.bodyParameters.push(template.variables[varName]);
+                                    }
+                                }
+                            }
+
+                            // To this:
+                            // Send message
+                            const sendResult = await WhatsAppService.sendTemplateMessage(message);
+
+                            // Create message record with initial status
+                            await MessageController.createMessageRecord({
+                                messageId: sendResult.messageId,
+                                campaignId: campaign.id,
+                                contactId: contact.id,
+                                status: sendResult.status, // Use status from response
+                                error: sendResult.error,
+                                timestamp: sendResult.timestamp
+                            });
+
+                            // Update counts based on immediate result
+                            const update = {};
+                            if (sendResult.status === 'sent') {
+                                update.delivered_count = 1;
+                            } else if (sendResult.status === 'failed') {
+                                update.failed_count = 1;
+                            }
+
+                            if (Object.keys(update).length > 0) {
+                                await Campaign.incrementStats(campaign.id, update);
+                            }
+                        } catch (error) {
+                            // Handle failed message creation
+                            await MessageController.createMessageRecord({
+                                messageId: `failed-${Date.now()}`,
+                                campaignId: campaign.id,
+                                contactId: contact.id,
+                                status: 'failed',
+                                error: error.message
+                            });
+
+                            await Campaign.incrementStats(campaign.id, { failed_count: 1 });
                         }
-
-                        // To this:
-                        // Send message
-                        const sendResult = await WhatsAppService.sendTemplateMessage(message);
-
-                        // Create message record with initial status
-                        await MessageController.createMessageRecord({
-                            messageId: sendResult.messageId,
-                            campaignId: campaign.id,
-                            contactId: contact.id,
-                            status: sendResult.status, // Use status from response
-                            error: sendResult.error,
-                            timestamp: sendResult.timestamp
-                        });
-
-                        // Update counts based on immediate result
-                        const update = {};
-                        if (sendResult.status === 'sent') {
-                            update.delivered_count = 1;
-                        } else if (sendResult.status === 'failed') {
-                            update.failed_count = 1;
-                        }
-
-                        if (Object.keys(update).length > 0) {
-                            await Campaign.incrementStats(campaign.id, update);
-                        }
-                    } catch (error) {
-                        // Handle failed message creation
-                        await MessageController.createMessageRecord({
-                            messageId: `failed-${Date.now()}`,
-                            campaignId: campaign.id,
-                            contactId: contact.id,
-                            status: 'failed',
-                            error: error.message
-                        });
-
-                        await Campaign.incrementStats(campaign.id, { failed_count: 1 });
                     }
+                    // Update campaign with initial counts
+                    const updatedStats = {
+                        recipientCount: results.total,
+                        deliveredCount: results.success,
+                        failedCount: results.failures,
+                        readCount: 0
+                    };
+
+                    // Determine initial status
+                    let campaignStatus = 'sending';
+                    if (results.failures === results.total) {
+                        campaignStatus = 'failed';
+                    } else if (results.success === results.total) {
+                        campaignStatus = 'completed';
+                    }
+
+                    await Campaign.updateStats(campaign.id, updatedStats);
+                    await Campaign.updateStatus(campaign.id, campaignStatus);
                 }
-                // Update campaign with initial counts
-                const updatedStats = {
-                    recipientCount: results.total,
-                    deliveredCount: results.success,
-                    failedCount: results.failures,
-                    readCount: 0
-                };
-
-                // Determine initial status
-                let campaignStatus = 'sending';
-                if (results.failures === results.total) {
-                    campaignStatus = 'failed';
-                } else if (results.success === results.total) {
-                    campaignStatus = 'completed';
-                }
-
-                await Campaign.updateStats(campaign.id, updatedStats);
-                await Campaign.updateStatus(campaign.id, campaignStatus);
-
                 res.json({
                     success: true,
-                    message: 'Messages queued for sending',
+                    message: sendNow ? 'Messages queued for sending' : 'Campaign scheduled successfully',
                     data: {
                         campaignId: campaign.id,
-                        initialStatus: campaignStatus,
-                        ...results
+                        initialStatus: sendNow ? 'sending' : 'scheduled',
+                        scheduledAt: scheduledAt
                     }
                 });
             } catch (error) {
@@ -439,34 +444,103 @@ class MessageController {
         }
         // Add to messageModel.js or similar
     static async checkStalledMessages() {
-        const connection = await pool.getConnection();
-        try {
-            // Find messages stuck in 'sent' status for more than 15 minutes
-            const [stalledMessages] = await connection.execute(
-                `SELECT id FROM messages 
+            const connection = await pool.getConnection();
+            try {
+                // Find messages stuck in 'sent' status for more than 15 minutes
+                const [stalledMessages] = await connection.execute(
+                    `SELECT id FROM messages 
              WHERE status = 'sent' 
              AND created_at < DATE_SUB(NOW(), INTERVAL 15 MINUTE)`
-            );
+                );
 
-            for (const message of stalledMessages) {
-                await connection.execute(
-                    `UPDATE messages SET 
+                for (const message of stalledMessages) {
+                    await connection.execute(
+                        `UPDATE messages SET 
                  status = 'failed',
                  error = 'Timeout: No delivery confirmation received',
                  updated_at = NOW()
                  WHERE id = ?`, [message.id]
-                );
+                    );
+
+                    // Update campaign stats
+                    const campaign = await Campaign.getByMessageId(message.id);
+                    if (campaign) {
+                        await Campaign.calculateStatsFromMessages(campaign.id);
+                    }
+                }
+            } finally {
+                connection.release();
+            }
+        }
+        // controllers/messageController.js
+
+    static async processCampaignMessages(campaignId, contacts, fieldMappings, templateId) {
+        // Get template
+        const template = await Template.getByIdForSending(templateId);
+
+        for (const contact of contacts) {
+            try {
+                // Prepare message
+                const message = {
+                    to: contact.wanumber,
+                    template: template.name,
+                    language: { code: template.language },
+                    bodyParameters: []
+                };
+
+                // Add header if exists
+                if (template.header_type && template.header_content) {
+                    message.header = {
+                        type: template.header_type,
+                        content: template.header_content
+                    };
+                }
+
+                // Map variables
+                if (template.variables) {
+                    const variableNames = Object.keys(template.variables);
+                    for (const varName of variableNames) {
+                        const fieldName = fieldMappings[varName];
+                        message.bodyParameters.push(
+                            fieldName && contact[fieldName] ?
+                            contact[fieldName] :
+                            template.variables[varName]
+                        );
+                    }
+                }
+
+                // Send message
+                const sendResult = await WhatsAppService.sendTemplateMessage(message);
+
+                // Create message record
+                await MessageController.createMessageRecord({
+                    messageId: sendResult.messageId,
+                    campaignId,
+                    contactId: contact.id,
+                    status: sendResult.status,
+                    error: sendResult.error,
+                    timestamp: sendResult.timestamp
+                });
 
                 // Update campaign stats
-                const campaign = await Campaign.getByMessageId(message.id);
-                if (campaign) {
-                    await Campaign.calculateStatsFromMessages(campaign.id);
-                }
+                await Campaign.incrementStats(campaignId, {
+                    delivered_count: sendResult.status === 'sent' ? 1 : 0,
+                    failed_count: sendResult.status === 'failed' ? 1 : 0
+                });
+            } catch (error) {
+                console.error('Error sending message:', error);
+                await MessageController.createMessageRecord({
+                    messageId: `failed-${Date.now()}`,
+                    campaignId,
+                    contactId: contact.id,
+                    status: 'failed',
+                    error: error.message
+                });
+                await Campaign.incrementStats(campaignId, { failed_count: 1 });
             }
-        } finally {
-            connection.release();
         }
     }
+
 }
 
 module.exports = MessageController;

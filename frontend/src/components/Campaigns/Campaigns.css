@@ -327,3 +327,20 @@
     background-color: #dc3545;
     color: #fff;
 }
+
+
+/* src/pages/Campaigns.css */
+
+.scheduled-info {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--text-secondary);
+    font-size: 0.9em;
+    margin-top: 8px;
+}
+
+.status-scheduled {
+    background-color: var(--color-info-light);
+    color: var(--color-info);
+}

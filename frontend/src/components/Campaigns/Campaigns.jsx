@@ -169,12 +169,26 @@ const calculatePercentage = (part, total) => {
   return `${Math.round((part / total) * 100)}%`;
 };
 
+// Add scheduled time display in campaign card
+const getScheduledDisplay = (campaign) => {
+  if (campaign.status !== 'scheduled') return null;
+  
+  const scheduledDate = new Date(campaign.scheduledAt);
+  const now = new Date();
+  
+  if (scheduledDate < now) {
+    return 'Processing...';
+  }
+  
+  return `Scheduled for ${formatDate(campaign.scheduledAt)}`;
+};
+
   return (
     <div className="campaigns">
       <div className="page-header">
         <h2>Campaigns</h2>
         <button 
-          onClick={() => navigate('/campaigns/create')} 
+          onClick={() => navigate('/send-message')} 
           className="btn btn-primary"
         >
           <Plus size={16} />
@@ -325,6 +339,12 @@ const calculatePercentage = (part, total) => {
             </div>
         </>
     )}
+    {campaign.status === 'scheduled' && (
+  <div className="scheduled-info">
+    <Calendar size={16} />
+    <span>{getScheduledDisplay(campaign)}</span>
+  </div>
+)}
 </div>
               
               <div className="campaign-actions">

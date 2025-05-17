@@ -12,6 +12,8 @@ const businessRoutes = require('./routes/businessRoutes');
 const campaignRoutes = require('./routes/campaignRoutes');
 const Message = require('./controllers/messageController');
 
+const SchedulerService = require('./services/schedulerService');
+
 require('dotenv').config();
 
 const app = express();
@@ -45,6 +47,13 @@ setInterval(async() => {
         console.error('Error checking stalled messages:', error);
     }
 }, 15 * 60 * 1000); // Check every 15 minutes
+
+
+
+// Check for scheduled campaigns every minute
+setInterval(() => {
+    SchedulerService.processScheduledCampaigns();
+}, 60000);
 // Add this with your other middleware
 app.use('/uploads', express.static(
     path.join(__dirname, 'public/uploads'), {

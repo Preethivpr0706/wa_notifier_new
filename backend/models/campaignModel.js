@@ -19,6 +19,12 @@ function determineCampaignStatus({ recipientCount, deliveredCount, failedCount }
 }
 class Campaign {
     // Create a new campaign
+    // models/campaignModel.js
+
+    // Add these fields to your campaigns table:
+    // ALTER TABLE campaigns ADD COLUMN contacts JSON;
+    // ALTER TABLE campaigns ADD COLUMN field_mappings JSON;
+
     static async create(campaignData) {
         const connection = await pool.getConnection();
         try {
@@ -30,17 +36,39 @@ class Campaign {
                 templateId,
                 status = 'draft',
                 scheduledAt = null,
-                userId
+                userId,
+                contacts, // Add these
+                fieldMappings, // Add these
+                recipientCount = 0
             } = campaignData;
 
-            // Insert campaign
+            // Format scheduledAt datetime
+            let formattedScheduledAt = null;
+            if (scheduledAt) {
+                formattedScheduledAt = new Date(scheduledAt)
+                    .toISOString()
+                    .slice(0, 19)
+                    .replace('T', ' ');
+            }
+
+            // Insert campaign with contacts and mappings
             await connection.execute(
                 `INSERT INTO campaigns (
-          id, name, template_id, status, scheduled_at, user_id,
-          recipient_count, delivered_count, read_count
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`, [
-                    campaignId, name, templateId, status, scheduledAt, userId,
-                    0, 0, 0
+                id, name, template_id, status, scheduled_at, user_id,
+                recipient_count, delivered_count, read_count,
+                contacts, field_mappings
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, [
+                    campaignId,
+                    name,
+                    templateId,
+                    status,
+                    formattedScheduledAt,
+                    userId,
+                    recipientCount,
+                    0,
+                    0,
+                    JSON.stringify(contacts),
+                    JSON.stringify(fieldMappings)
                 ]
             );
 
@@ -53,6 +81,7 @@ class Campaign {
             connection.release();
         }
     }
+
 
     // Get all campaigns for a user
     static async getAllByUser(userId, filters = {}) {
@@ -307,26 +336,62 @@ class Campaign {
         }
         // Delete campaign
     static async delete(campaignId, userId) {
+            const connection = await pool.getConnection();
+            try {
+                await connection.beginTransaction();
+
+                // Verify campaign exists and belongs to user
+                const [campaigns] = await connection.execute(
+                    'SELECT id FROM campaigns WHERE id = ? AND user_id = ?', [campaignId, userId]
+                );
+
+                if (campaigns.length === 0) {
+                    throw new Error('Campaign not found or not authorized');
+                }
+
+                // Delete campaign
+                const [result] = await connection.execute(
+                    'DELETE FROM campaigns WHERE id = ?', [campaignId]
+                );
+
+                await connection.commit();
+                return result.affectedRows > 0;
+            } catch (error) {
+                await connection.rollback();
+                throw error;
+            } finally {
+                connection.release();
+            }
+        }
+        // models/campaignModel.js
+
+    // Add this method to handle scheduled campaigns
+    static async getScheduledCampaigns() {
+        const [campaigns] = await pool.execute(
+            `SELECT * FROM campaigns 
+     WHERE status = 'scheduled' 
+     AND scheduled_at <= NOW() 
+     AND scheduled_at IS NOT NULL`
+        );
+        return campaigns;
+    }
+
+    // Add method to start a scheduled campaign
+    static async startScheduledCampaign(campaignId) {
         const connection = await pool.getConnection();
         try {
             await connection.beginTransaction();
 
-            // Verify campaign exists and belongs to user
-            const [campaigns] = await connection.execute(
-                'SELECT id FROM campaigns WHERE id = ? AND user_id = ?', [campaignId, userId]
-            );
-
-            if (campaigns.length === 0) {
-                throw new Error('Campaign not found or not authorized');
-            }
-
-            // Delete campaign
-            const [result] = await connection.execute(
-                'DELETE FROM campaigns WHERE id = ?', [campaignId]
+            // Update campaign status to sending
+            await connection.execute(
+                `UPDATE campaigns 
+       SET status = 'sending', 
+           sent_at = NOW() 
+       WHERE id = ?`, [campaignId]
             );
 
             await connection.commit();
-            return result.affectedRows > 0;
+            return true;
         } catch (error) {
             await connection.rollback();
             throw error;
@@ -334,6 +399,7 @@ class Campaign {
             connection.release();
         }
     }
+
 }
 
 module.exports = Campaign;
