@@ -3,6 +3,7 @@ const express = require('express');
 const cors = require('cors');
 const path = require('path');
 const fs = require('fs');
+const { authenticate } = require('./middleware/auth');
 const { testConnection } = require('./config/database');
 const templateRoutes = require('./routes/templateRoutes');
 // Add this with other route imports
@@ -10,6 +11,7 @@ const contactRoutes = require('./routes/contactRoutes');
 const messageRoutes = require('./routes/messageRoutes');
 const businessRoutes = require('./routes/businessRoutes');
 const campaignRoutes = require('./routes/campaignRoutes');
+const authRoutes = require('./routes/authRoutes');
 const Message = require('./controllers/messageController');
 
 const SchedulerService = require('./services/schedulerService');
@@ -25,19 +27,18 @@ app.use(express.urlencoded({ extended: true }));
 
 // Test database connection
 testConnection();
-
 // Routes
-app.use('/api/templates', templateRoutes);
+app.use('/api/templates', authenticate, templateRoutes);
 
-
+app.use('/api/auth', authRoutes);
 // Add this with other route middleware
-app.use('/api/contacts', contactRoutes);
+app.use('/api/contacts', authenticate, contactRoutes);
 
-app.use('/api/messages/', messageRoutes);
+app.use('/api/messages/', authenticate, messageRoutes);
 
-app.use('/api/campaigns', campaignRoutes);
+app.use('/api/campaigns', authenticate, campaignRoutes);
 
-app.use('/api/business', businessRoutes);
+app.use('/api/business', authenticate, businessRoutes);
 
 // Add to your server initialization code
 setInterval(async() => {

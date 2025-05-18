@@ -1,10 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const CampaignController = require('../controllers/campaignController');
-const { authenticate } = require('../middleware/auth');
 
-// Apply authentication middleware to all campaign routes
-//router.use(authenticate);
 
 // Campaign routes
 router.post('/', CampaignController.createCampaign);

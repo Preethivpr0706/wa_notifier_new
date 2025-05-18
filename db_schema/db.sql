@@ -164,3 +164,6 @@ CREATE TABLE message_status_history (
 
 ALTER TABLE campaigns ADD COLUMN contacts JSON;
 ALTER TABLE campaigns ADD COLUMN field_mappings JSON;
+
+
+alter table users add column password varchar(300) default null;

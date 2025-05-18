@@ -6,7 +6,7 @@ class BusinessController {
     static async getBusinessDetails(req, res) {
         try {
             // For testing, let's hardcode a user ID
-            const userId = 1; // Replace with req.user.id when authentication is set up
+            const userId = req.user.id;
 
             const business = await Business.getByUserId(userId);
 
@@ -38,7 +38,8 @@ class BusinessController {
     static async updateBusinessDetails(req, res) {
         try {
             const { name, description, industry, size, contactEmail, contactPhone, website } = req.body;
-            const updatedBusiness = await Business.update(1, {
+            const userId = req.user.id;
+            const updatedBusiness = await Business.update(userId, {
                 name,
                 description,
                 industry,
@@ -88,7 +89,7 @@ class BusinessController {
             const absoluteUrl = `${req.protocol}://${req.get('host')}${filePath}`;
 
             // Update database
-            const updatedBusiness = await Business.updateProfileImage(1, absoluteUrl);
+            const updatedBusiness = await Business.updateProfileImage(req.user.id, absoluteUrl);
 
             return res.json({
                 success: true,

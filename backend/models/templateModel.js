@@ -243,7 +243,7 @@ class Template {
         }
     }
 
-    static async updateStatus(templateId, status, additionalData = {}) {
+    static async updateStatus(templateId, status, additionalData = {}, userId) {
             const connection = await pool.getConnection();
             try {
                 await connection.beginTransaction();
@@ -270,7 +270,7 @@ class Template {
             await connection.commit();
             
             // Return the updated template
-            return await this.getById(templateId, additionalData.user_id || 1);
+            return await this.getById(templateId, additionalData.user_id || userId);
         } catch (error) {
             await connection.rollback();
             throw error;
@@ -289,7 +289,7 @@ class Template {
         return templates;
       }
     // In the updateStatus method, ensure it handles the whatsapp_id update
-static async updateStatus(templateId, status, additionalData = {}) {
+static async updateStatus(templateId, status, additionalData = {},userId) {
     console.log(templateId, status, additionalData);
     const connection = await pool.getConnection();
     try {
@@ -318,7 +318,7 @@ static async updateStatus(templateId, status, additionalData = {}) {
       await connection.execute(query, [...values, templateId]);
       await connection.commit();
       
-      return await this.getById(templateId, additionalData.user_id || 1);
+      return await this.getById(templateId, additionalData.user_id || userId);
     } catch (error) {
       await connection.rollback();
       throw error;

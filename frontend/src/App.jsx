@@ -1,5 +1,6 @@
+// src/App.jsx
 import { useState } from 'react';
-import { Routes, Route } from 'react-router-dom';
+import { Routes, Route, Navigate, Outlet } from 'react-router-dom';
 import Sidebar from './components/Sidebar/Sidebar';
 import Header from './components/Header/Header';
 import Dashboard from './components/Dashboard/Dashboard';
@@ -8,13 +9,17 @@ import CreateTemplate from './components/CreateTemplate/CreateTemplate';
 import Campaigns from './components/Campaigns/Campaigns';
 import SendMessage from './components/SendMessage/SendMessage';
 import Settings from './components/Settings/Settings';
-import './styles/App.css';
 import EditTemplate from './components/EditTemplate/EditTemplate';
 import ImportContacts from './components/Contact/ImportContacts';
 import ContactLists from './components/Contact/ContactLists';
 import CampaignDetails from './components/Campaigns/CampaignDetails';
 import EditCampaign from './components/SendMessage/EditCampaign';
-function App() {
+import Login from './components/Login/Login';
+import ProtectedRoute from './components/ProtectedRoute';
+import './styles/App.css';
+
+// Layout component to wrap protected routes
+const Layout = () => {
   const [sidebarOpen, setSidebarOpen] = useState(true);
 
   const toggleSidebar = () => {
@@ -27,22 +32,43 @@ function App() {
       <div className="main-content">
         <Header toggleSidebar={toggleSidebar} />
         <div className="page-container">
-          <Routes>
-            <Route path="/" element={<Dashboard />} />
-            <Route path="/templates" element={<MessageTemplates />} />
-        <Route path="/templates/create" element={<CreateTemplate />} />
-        <Route path="/templates/edit/:id" element={<EditTemplate/>} />
-            <Route path="/campaigns" element={<Campaigns />} />
-            <Route path="/send-message" element={<SendMessage />} />
-            <Route path="/settings" element={<Settings />} />
-            <Route path="/contacts/import" element={<ImportContacts/>}/>
-            <Route path="/contacts/list" element={<ContactLists />} />
-            <Route path="/campaigns/:id" element={<CampaignDetails />} />
-            <Route path="/campaigns/:id/edit" element={<EditCampaign />} />
-         </Routes>
+          <Outlet /> {/* This renders the child routes */}
         </div>
       </div>
     </div>
+  );
+};
+
+function App() {
+  return (
+    <Routes>
+      {/* Public Routes */}
+      <Route path="/login" element={<Login />} />
+
+      {/* Protected Routes wrapped in Layout */}
+      <Route
+        element={
+          <ProtectedRoute>
+            <Layout />
+          </ProtectedRoute>
+        }
+      >
+        <Route path="/" element={<Dashboard />} />
+        <Route path="/templates" element={<MessageTemplates />} />
+        <Route path="/templates/create" element={<CreateTemplate />} />
+        <Route path="/templates/edit/:id" element={<EditTemplate />} />
+        <Route path="/campaigns" element={<Campaigns />} />
+        <Route path="/campaigns/:id" element={<CampaignDetails />} />
+        <Route path="/campaigns/:id/edit" element={<EditCampaign />} />
+        <Route path="/send-message" element={<SendMessage />} />
+        <Route path="/settings" element={<Settings />} />
+        <Route path="/contacts/import" element={<ImportContacts />} />
+        <Route path="/contacts/list" element={<ContactLists />} />
+      </Route>
+
+      {/* Redirect unknown routes to dashboard */}
+      <Route path="*" element={<Navigate to="/" replace />} />
+    </Routes>
   );
 }
 

@@ -11,6 +11,13 @@ const apiClient = axios.create({
 });
 
 // Add auth interceptor as in your templateService
+apiClient.interceptors.request.use((config) => {
+  const token = localStorage.getItem('token');
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+  return config;
+});
 
 export const businessService = {
     getBusinessDetails: async () => {

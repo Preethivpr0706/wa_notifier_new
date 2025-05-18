@@ -1,16 +1,12 @@
 // controllers/messageController.js
 const WhatsAppService = require('../services/WhatsAppService');
 const Campaign = require('../models/campaignModel');
-const Contact = require('../controllers/contactController');
+const Contact = require('../controllers/ContactController');
 const Template = require('../models/templateModel');
 const { v4: uuidv4 } = require('uuid');
 
 const { pool } = require('../config/database'); // Add this at the top
 class MessageController {
-    // controllers/messageController.js
-
-    // In MessageController class
-
 
     static async sendBulkMessages(req, res) {
             try {
@@ -24,8 +20,7 @@ class MessageController {
                     sendNow,
                     scheduledAt
                 } = req.body;
-                // Add userId at the beginning of the method
-                const userId = 1; // Hardcoded for testing - should come from auth middleware in production
+                const userId = req.user.id;
 
                 // Validate required fields
                 if (!templateId) {
@@ -561,7 +556,7 @@ class MessageController {
                 scheduledAt = null
             } = req.body;
 
-            const userId = 1; // Replace with actual user ID from auth
+            const userId = req.user.id;
 
             // Validate required fields
             if (!templateId) {
@@ -608,7 +603,7 @@ class MessageController {
     static async sendDraft(req, res) {
         try {
             const { id } = req.params;
-            const userId = 1; // Replace with actual user ID from auth
+            const userId = req.user.id;
 
             // Get the draft campaign
             const campaign = await Campaign.getById(id, userId);

@@ -2,7 +2,7 @@
 const express = require('express');
 const router = express.Router();
 const MessageController = require('../controllers/messageController');
-const { authenticate } = require('../middleware/auth');
+
 const multer = require('multer');
 
 const upload = multer({ storage: multer.memoryStorage() });

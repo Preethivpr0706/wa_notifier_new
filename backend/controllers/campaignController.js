@@ -56,7 +56,7 @@ class CampaignController {
             console.log('Fetching campaigns...'); // Add logging
 
             // Either use authenticated user or remove auth completely
-            const userId = 1; // For testing - replace with req.user.id when auth is enabled
+            const userId = req.user.id;
             const { status, templateId } = req.query;
             const filters = {};
 
@@ -91,7 +91,7 @@ class CampaignController {
     static async getCampaignById(req, res) {
         try {
             const { id } = req.params;
-            const userId = 1;
+            const userId = req.user.id;
 
             const campaign = await Campaign.getById(id, userId);
 
@@ -121,8 +121,7 @@ class CampaignController {
         try {
             const { id } = req.params;
             const { status } = req.body;
-            //const userId = req.user.id;
-            const userId = 1;
+            const userId = req.user.id;
 
             // Verify campaign exists and belongs to user
             const campaign = await Campaign.getById(id, userId);
@@ -170,8 +169,7 @@ class CampaignController {
         try {
             const { id } = req.params;
             const { recipientCount, deliveredCount, readCount } = req.body;
-            // const userId = req.user.id;
-            const userId = 1;
+            const userId = req.user.id;
 
             // Verify campaign exists and belongs to user
             const campaign = await Campaign.getById(id, userId);
@@ -215,7 +213,7 @@ class CampaignController {
     static async deleteCampaign(req, res) {
         try {
             const { id } = req.params;
-            const userId = 1; //req.user.id;
+            const userId = req.user.id;
 
             const deleted = await Campaign.delete(id, userId);
 
@@ -242,7 +240,7 @@ class CampaignController {
     static async updateCampaign(req, res) {
         try {
             const { id } = req.params;
-            const userId = 1; // Replace with actual user ID from auth
+            const userId = req.user.id;
             const updateData = req.body;
 
             // Verify campaign exists and belongs to user

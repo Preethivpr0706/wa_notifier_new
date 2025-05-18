@@ -6,7 +6,7 @@ class TemplateController {
     // Create a new template and submit for approval
     static async createTemplate(req, res) {
             try {
-                const userId = 1;
+                const userId = req.user.id;
 
                 const templateData = {
                     name: req.body.name,
@@ -34,7 +34,8 @@ class TemplateController {
                         {
                             whatsapp_id: whatsappResponse.id,
                             whatsapp_status: whatsappResponse.status
-                        }
+                        },
+                        userId
                     );
 
                     res.status(201).json({
@@ -49,7 +50,7 @@ class TemplateController {
                     // Update template with failed status
                     await Template.updateStatus(template.id, 'failed', {
                         rejection_reason: whatsappError.message
-                    });
+                    }, userId);
 
                     res.status(201).json({
                         success: true,
@@ -70,7 +71,7 @@ class TemplateController {
         // Save template as draft
     static async saveAsDraft(req, res) {
         try {
-            const userId = 1;
+            const userId = req.user.id;
 
             // Transform the request body
             const templateData = {
@@ -107,7 +108,7 @@ class TemplateController {
     // Get all templates
     static async getTemplates(req, res) {
         try {
-            const defaultUserId = '1';
+            const defaultUserId = req.user.id;
             const { status, category } = req.query;
             const filters = {};
             if (status) filters.status = status;
@@ -125,7 +126,7 @@ class TemplateController {
                                 whatsapp_status: statusUpdate.whatsappStatus,
                                 quality_score: statusUpdate.qualityScore || null,
                                 rejection_reason: statusUpdate.rejectionReason || null
-                            });
+                            }, defaultUserId);
                         }
                     } catch (error) {
                         console.error(`Failed to update status for template ${template.id}:`, error);
@@ -152,8 +153,7 @@ class TemplateController {
     // Get a template by ID
     static async getTemplateById(req, res) {
         try {
-            const userId = 1;
-            // const userId = req.user.id;
+            const userId = req.user.id;
             const templateId = req.params.id;
 
             const template = await Template.getById(templateId, userId);
@@ -184,7 +184,7 @@ class TemplateController {
     // In templateController.js - improved updateTemplate method 
     static async updateTemplate(req, res) {
         try {
-            const userId = 1; // Should come from auth
+            const userId = req.user.id;
             const templateId = req.params.id;
 
             // Ensure we have all required fields
@@ -274,7 +274,7 @@ class TemplateController {
 
     static async deleteTemplate(req, res) {
         try {
-            const userId = 1; // Replace with actual user ID from auth
+            const userId = req.user.id;
             const templateId = req.params.id;
 
             // First get the template to check its WhatsApp status
@@ -336,8 +336,7 @@ class TemplateController {
     // Submit template for WhatsApp approval
     static async submitForApproval(req, res) {
         try {
-            const userId = 1;
-            // const userId = req.user.id;
+            const userId = req.user.id;
             const templateId = req.params.id;
 
             // Get template details
@@ -385,7 +384,7 @@ class TemplateController {
     // Add this new method to TemplateController
     static async submitDraftTemplate(req, res) {
             try {
-                const userId = 1; // Should come from auth
+                const userId = req.user.id;
                 const templateId = req.params.id;
 
                 // 1. Get the draft template
@@ -435,7 +434,8 @@ class TemplateController {
                         whatsapp_id: whatsappResponse.id,
                         whatsapp_status: whatsappResponse.status,
                         user_id: userId
-                    }
+                    },
+                    userId
                 );
 
                 res.status(200).json({
@@ -458,7 +458,7 @@ class TemplateController {
         // Add this new method
     static async updateDraftTemplate(req, res) {
         try {
-            const userId = 1; // Should come from auth
+            const userId = req.user.id;
             const templateId = req.params.id;
             const templateData = req.body;
 
@@ -495,7 +495,7 @@ class TemplateController {
 
     static async checkTemplateStatus(req, res) {
             try {
-                const userId = 1; // Should come from auth
+                const userId = req.user.id;
                 const templateId = req.params.id;
 
                 // Get the template from our database
@@ -519,7 +519,8 @@ class TemplateController {
                             quality_score: statusUpdate.qualityScore,
                             rejection_reason: statusUpdate.rejectionReason,
                             user_id: userId
-                        }
+                        },
+                        userId
                     );
 
                     return res.status(200).json({

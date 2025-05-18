@@ -1,7 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const ContactController = require('../controllers/contactController');
-const { authenticate } = require('../middleware/auth');
+const ContactController = require('../controllers/ContactController');
 const multer = require('multer');
 
 const storage = multer.memoryStorage();
@@ -12,8 +11,6 @@ const upload = multer({
     }
 });
 
-// All routes require authentication
-// router.use(authenticate);
 
 // Contact list routes
 router.post('/lists', ContactController.createList);

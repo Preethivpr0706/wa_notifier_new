@@ -1,5 +1,7 @@
   import { useState } from 'react';
-  import { Link, useLocation } from 'react-router-dom';
+ import { Link, useLocation, useNavigate } from 'react-router-dom'; 
+import { authService } from '../../api/authService'; 
+  
   import { 
     LayoutDashboard, 
     FileText, 
@@ -17,8 +19,10 @@
 
   function Sidebar({ isOpen, toggleSidebar }) {
     const location = useLocation();
+    const navigate=useNavigate();
     const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
     const [contactsOpen, setContactsOpen] = useState(false);
+    const [isLoading, setIsLoading] = useState(false); // Add loading state
 
     const menuItems = [
       { 
@@ -49,16 +53,27 @@
     ];
 
     const handleLogout = () => {
-      setShowLogoutConfirm(true);
+        setShowLogoutConfirm(true);
     };
 
-    const confirmLogout = () => {
-      console.log('User logged out');
-      setShowLogoutConfirm(false);
+    const confirmLogout = async () => {
+        try {
+            setIsLoading(true);
+            // Wait for logout to complete
+            await authService.logout();
+            setShowLogoutConfirm(false);
+            // Navigate to login page after logout is complete
+            navigate('/login', { replace: true }); // Use replace to prevent going back
+        } catch (error) {
+            console.error('Logout error:', error);
+            // Optionally show error message
+        } finally {
+            setIsLoading(false);
+        }
     };
 
     const cancelLogout = () => {
-      setShowLogoutConfirm(false);
+        setShowLogoutConfirm(false);
     };
 
     const toggleContacts = () => {
@@ -146,8 +161,20 @@
               <h3>Confirm Logout</h3>
               <p>Are you sure you want to log out?</p>
               <div className="logout-actions">
-                <button className="btn btn-secondary" onClick={cancelLogout}>Cancel</button>
-                <button className="btn btn-primary" onClick={confirmLogout}>Logout</button>
+                <button 
+                    className="btn btn-secondary" 
+                    onClick={cancelLogout}
+                    disabled={isLoading}
+                >
+                    Cancel
+                </button>
+                <button 
+                    className="btn btn-primary" 
+                    onClick={confirmLogout}
+                    disabled={isLoading}
+                >
+                    {isLoading ? 'Logging out...' : 'Logout'}
+                </button>
               </div>
             </div>
           </div>

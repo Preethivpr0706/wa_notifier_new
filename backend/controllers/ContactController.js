@@ -6,8 +6,7 @@ class ContactController {
     static async createList(req, res) {
         try {
             const { name } = req.body;
-            //const userId = req.user?.id;
-            const userId = 1; // Replace with actual user ID from auth
+            const userId = req.user.id;
 
             if (!name) {
                 return res.status(400).json({ success: false, message: 'List name is required' });
@@ -34,8 +33,7 @@ class ContactController {
     // Get all contact lists for user
     static async getLists(req, res) {
         try {
-            //const userId = req.user?.id;
-            const userId = 1; // Replace with actual user ID from auth
+            const userId = req.user.id;
 
             const [lists] = await pool.execute(
                 'SELECT id, name FROM contact_lists WHERE user_id = ? ORDER BY created_at DESC', [userId]
@@ -55,8 +53,7 @@ class ContactController {
     static async createContact(req, res) {
         try {
             const { fname, lname, wanumber, email, listId, newListName } = req.body;
-            //const userId = req.user?.id;
-            const userId = 1; // Replace with actual user ID from auth
+            const userId = req.user.id;
 
             // Validate required fields
             if (!wanumber) {
@@ -98,7 +95,7 @@ class ContactController {
     static async importContacts(req, res) {
         try {
             const { listName } = req.body;
-            const userId = 1;
+            const userId = req.user.id;
 
             if (!req.file) {
                 return res.status(400).json({ success: false, message: 'CSV file is required' });
@@ -233,8 +230,7 @@ class ContactController {
     static async getContacts(req, res) {
         try {
             const { listId } = req.query;
-            //const userId = req.user?.id;
-            const userId = 1; // Replace with actual user ID from auth
+            const userId = req.user.id;
 
             let query = `
                 SELECT c.id, c.fname, c.lname, c.wanumber, c.email, c.list_id, l.name as list_name
@@ -267,8 +263,7 @@ class ContactController {
     static async getContactById(req, res) {
         try {
             const { id } = req.params;
-            //const userId = req.user?.id;
-            const userId = 1; // Replace with actual user ID from auth
+            const userId = req.user.id;
 
             const [contacts] = await pool.execute(
                 `SELECT c.id, c.fname, c.lname, c.wanumber, c.email, c.list_id, l.name as list_name
@@ -296,8 +291,7 @@ class ContactController {
         try {
             const { id } = req.params;
             const { fname, lname, wanumber, email, listId } = req.body;
-            //const userId = req.user?.id;
-            const userId = 1; // Replace with actual user ID from auth
+            const userId = req.user.id;
 
             // First verify the contact exists and belongs to user
             const [existing] = await pool.execute(
@@ -332,8 +326,7 @@ class ContactController {
     static async deleteContact(req, res) {
         try {
             const { id } = req.params;
-            //const userId = req.user?.id;
-            const userId = 1; // Replace with actual user ID from auth
+            const userId = req.user.id;
 
             // First verify the contact exists and belongs to user
             const [existing] = await pool.execute(
@@ -381,7 +374,7 @@ class ContactController {
     }
     static async getSendingLists(req, res) {
         try {
-            const userId = 1; // Replace with actual user ID from auth
+            const userId = req.user.id;
 
             const [lists] = await pool.execute(
                 `SELECT cl.id, cl.name, COUNT(c.id) as contactCount 
