@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react';
 import './AddContactModal.css'; // Import the new CSS file
-import { createContact, createList } from '../../api/contactService';
 
 const AddContactModal = ({ isOpen, onClose, onSave, existingLists }) => {
   const [isSaving, setIsSaving] = useState(false);

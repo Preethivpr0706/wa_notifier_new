@@ -2,9 +2,8 @@ import { useState, useRef,  useEffect } from 'react';
 import Papa from 'papaparse';
 import './ImportContacts.css';
 import AddContactModal from './AddContactModal';
-import { importContacts, getLists } from '../../api/contactService';
+import { contactService} from '../../api/contactService';
 
-import { createContact, createList } from '../../api/contactService';
 const ImportContacts = () => {
   // State management
   const [listName, setListName] = useState('');
@@ -146,7 +145,7 @@ const ImportContacts = () => {
 useEffect(() => {
     const fetchLists = async () => {
       try {
-        const response = await getLists();
+        const response = await contactService.getLists();
         setContactLists(response.data);
       } catch (error) {
         console.error('Failed to fetch contact lists:', error);
@@ -175,7 +174,7 @@ useEffect(() => {
       formData.append('listName', listName);
       formData.append('csvFile', fileInputRef.current.files[0]);
   
-      const response = await importContacts(formData);
+      const response = await contactService.importContacts(formData);
       
       setSuccessMessage(`Successfully imported ${response.data.count} contacts to "${listName}"`);
       // Reset form
@@ -185,7 +184,7 @@ useEffect(() => {
       fileInputRef.current.value = '';
       
       // Refresh contact lists
-      const listsResponse = await getLists();
+      const listsResponse = await contactService.getLists();
       setContactLists(listsResponse.data);
     } catch (error) {
       console.error('Import error:', error);
@@ -221,12 +220,12 @@ const handleSaveContact = async (contactData) => {
       
       // Create new list if needed
       if (contactData.newListName) {
-        const response = await createList({ name: contactData.newListName });
+        const response = await contactService.createList({ name: contactData.newListName });
         listId = response.data.id;
       }
       
       // Create the contact
-      await createContact({
+      await contactService.createContact({
         fname: contactData.fname,
         lname: contactData.lname,
         wanumber: contactData.wanumber,
@@ -237,7 +236,7 @@ const handleSaveContact = async (contactData) => {
       // Refresh data or show success message
       console.log('Contact saved successfully!');
      // Refresh contact lists
-    const listsResponse = await getLists();
+    const listsResponse = await contactService.getLists();
     setContactLists(listsResponse.data);
     
     // Show success message

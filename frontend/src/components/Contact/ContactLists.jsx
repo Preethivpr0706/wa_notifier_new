@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { getLists, getContacts, deleteContact } from '../../api/contactService';
+import {contactService } from '../../api/contactService';
 import { Trash2, Loader, ChevronRight, UserPlus, Search } from 'lucide-react';
 import './ContactLists.css'; // Import the separate CSS file
 
@@ -15,7 +15,7 @@ const ContactLists = () => {
     const fetchData = async () => {
       try {
         setIsLoading(true);
-        const listsResponse = await getLists();
+        const listsResponse = await contactService.getLists();
         setLists(listsResponse.data);
       } catch (err) {
         setError(err.message || 'Failed to load contact lists');
@@ -31,7 +31,7 @@ const ContactLists = () => {
       const fetchContacts = async () => {
         try {
           setIsLoading(true);
-          const contactsResponse = await getContacts(selectedList);
+          const contactsResponse = await contactService.getContacts(selectedList);
           setContacts(contactsResponse.data);
         } catch (err) {
           setError(err.message || 'Failed to load contacts');
@@ -45,7 +45,7 @@ const ContactLists = () => {
 
   const handleDelete = async (contactId) => {
     try {
-      await deleteContact(contactId);
+      await contactService.deleteContact(contactId);
       setContacts(contacts.filter(c => c.id !== contactId));
     } catch (err) {
       setError(err.message || 'Failed to delete contact');

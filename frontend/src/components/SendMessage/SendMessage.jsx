@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { FileText, Users, Image, Video, Upload, BarChart3, Send, ChevronRight, AlertTriangle } from 'lucide-react';
 import FieldMapper from './FieldMapper';
 import { templateService } from '../../api/templateService';
-import { getContacts, getListsForSending } from '../../api/contactService';
+import {contactService} from '../../api/contactService';
 import { messageService } from '../../api/messageService';
 import MediaUploadModal from './MediaUploadModal';
 import './SendMessage.css';
@@ -54,8 +54,8 @@ function SendMessage() {
         setIsLoading(true);
         const [templatesRes, contactsRes, listsRes] = await Promise.all([
           templateService.getTemplates({ status: 'approved' }),
-          getContacts(),
-          getListsForSending() 
+          contactService.getContacts(),
+          contactService.getListsForSending() 
         ]);
         
         setTemplates(templatesRes.data?.templates || []);
