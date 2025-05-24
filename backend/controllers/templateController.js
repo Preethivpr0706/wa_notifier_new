@@ -182,6 +182,8 @@ class TemplateController {
     // Update a template
 
     // In templateController.js - improved updateTemplate method 
+    // Fixed updateTemplate method in templateController.js
+
     static async updateTemplate(req, res) {
         try {
             const userId = req.user.id;
@@ -225,11 +227,13 @@ class TemplateController {
                         headerType: updatedTemplate.header_type
                     };
 
+                    // Pass the original template as the third parameter
                     const whatsappResponse = await WhatsAppService.updateTemplate(
                         existingTemplate.whatsapp_id,
                         whatsappPayload,
                         existingTemplate // Pass original template for validation
                     );
+
                     // Update the category in our database based on WhatsApp's response
                     if (whatsappResponse.category) {
                         await Template.update(templateId, {

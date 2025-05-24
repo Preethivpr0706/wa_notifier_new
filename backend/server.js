@@ -34,7 +34,7 @@ app.use('/api/auth', authRoutes);
 // Add this with other route middleware
 app.use('/api/contacts', authenticate, contactRoutes);
 
-app.use('/api/messages/', authenticate, messageRoutes);
+app.use('/api/messages/', messageRoutes);
 
 app.use('/api/campaigns', authenticate, campaignRoutes);
 

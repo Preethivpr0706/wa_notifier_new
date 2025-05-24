@@ -490,7 +490,8 @@ class WhatsAppService {
 
      // Update existing template on WhatsApp
    
-static async updateTemplate(whatsappId, template) {
+// Fixed updateTemplate method in WhatsAppService.js
+static async updateTemplate(whatsappId, template, originalTemplate) {
     try {
         // Check if name, category, or language were modified
         if (
@@ -500,38 +501,39 @@ static async updateTemplate(whatsappId, template) {
         ) {
             throw new Error("Cannot update template: Name, category, or language cannot be changed after WhatsApp submission.");
         }
-        const whatsappApiToken = process.env.WHATSAPP_API_TOKEN;
         
+        const whatsappApiToken = process.env.WHATSAPP_API_TOKEN;
+
         if (!whatsappApiToken || !whatsappId) {
             throw new Error('WhatsApp API configuration is missing or template ID is invalid');
         }
-        
+
         // Safely handle body text
         const bodyText = template.bodyText || template.body_text || '';
-        
+
         // Handle variables - ensure it's always an object
         let variables = {};
         try {
-            variables = typeof template.variables === 'string' ? 
-                JSON.parse(template.variables) : 
+            variables = typeof template.variables === 'string' ?
+                JSON.parse(template.variables) :
                 (template.variables || {});
         } catch (e) {
             console.error('Error parsing variables:', e);
         }
-        
+
         // Convert variables if body text exists
         let processedBody = bodyText;
         let orderedVariables = {};
-        
+
         if (bodyText) {
             const conversionResult = this.convertVariablesForWhatsApp(bodyText, variables);
             processedBody = conversionResult.processedBody;
             orderedVariables = conversionResult.orderedVariables;
         }
-        
+
         // Prepare components
         const components = [];
-        
+
         // Header component
         if (template.headerType && template.headerContent) {
             const headerType = template.headerType.toLowerCase();
@@ -539,10 +541,10 @@ static async updateTemplate(whatsappId, template) {
                 type: "HEADER",
                 format: headerType.toUpperCase()
             };
-            
+
             if (headerType === 'text') {
                 headerComponent.text = template.headerContent;
-                
+
                 // Add example for header text variables if needed
                 if (template.headerContent.includes('{{')) {
                     // Extract variable names and match them with samples
@@ -552,7 +554,7 @@ static async updateTemplate(whatsappId, template) {
                     while ((match = headerVarRegex.exec(template.headerContent)) !== null) {
                         headerVars.push(match[1]);
                     }
-                    
+
                     if (headerVars.length > 0) {
                         headerComponent.example = {
                             header_text: [variables[headerVars[0]] || "Example"]
@@ -566,20 +568,29 @@ static async updateTemplate(whatsappId, template) {
             }
             components.push(headerComponent);
         }
-        
-        // Body component
-        const bodyComponent = {
-            type: "BODY",
-            text: processedBody
-        };
-        
-        if (Object.keys(orderedVariables).length > 0) {
-            bodyComponent.example = {
-                body_text: [Object.values(orderedVariables)]
+
+        // Body component - FIXED: Always include example if there are variables
+        if (bodyText) {
+            const bodyComponent = {
+                type: "BODY",
+                text: processedBody
             };
+
+            // CRITICAL FIX: Always add example when variables exist, even if empty
+            if (Object.keys(orderedVariables).length > 0) {
+                // Ensure we have non-empty example values
+                const exampleValues = Object.values(orderedVariables).map(value => 
+                    value && value.trim() !== '' ? value : 'Sample'
+                );
+                
+                bodyComponent.example = {
+                    body_text: [exampleValues] // Must be array of arrays
+                };
+            }
+            
+            components.push(bodyComponent);
         }
-        components.push(bodyComponent);
-        
+
         // Footer component
         if (template.footerText) {
             components.push({
@@ -587,14 +598,14 @@ static async updateTemplate(whatsappId, template) {
                 text: template.footerText
             });
         }
-        
+
         // Buttons component
         if (template.buttons && template.buttons.length > 0) {
             const buttonsComponent = {
                 type: "BUTTONS",
                 buttons: template.buttons.map(button => {
                     const buttonConfig = { text: button.text };
-                    
+
                     switch (button.type) {
                         case 'phone_number':
                             return {
@@ -620,19 +631,19 @@ static async updateTemplate(whatsappId, template) {
             };
             components.push(buttonsComponent);
         }
-        
+
         // Prepare payload - note that we're not including name and language for updates
         const payload = {
             components
         };
-        
+
         // For rejected templates, we might need to update the category
         if (template.status === 'rejected') {
             payload.category = template.category.toUpperCase();
         }
-        
-        console.log(`Updating WhatsApp template ID ${whatsappId} with payload:`, payload);
-        
+
+        console.log(`Updating WhatsApp template ID ${whatsappId} with payload:`, JSON.stringify(payload, null, 2));
+
         // Use the direct template ID endpoint for updates
         const response = await axios.post(
             `https://graph.facebook.com/v19.0/${whatsappId}`,
@@ -644,150 +655,336 @@ static async updateTemplate(whatsappId, template) {
                 }
             }
         );
-        
+
         console.log('WhatsApp template update response:', response.data);
         return response.data;
     } catch (error) {
         console.error('WhatsApp API Error:', error.response?.data || error.message);
         throw new Error(
-            error.response?.data?.error?.message || 
+            error.response?.data?.error?.message ||
             'WhatsApp template update failed'
         );
     }
 }
 
-
-// services/WhatsAppService.js
-
-// In WhatsAppService class
-
-static async sendTemplateMessage(messageData) {
+// Also need to fix the convertVariablesForWhatsApp method to handle empty variables better
+static convertVariablesForWhatsApp(bodyText, variableSamples = {}) {
     try {
-        const whatsappApiUrl = process.env.WHATSAPP_API_URL;
-        const whatsappApiToken = process.env.WHATSAPP_API_TOKEN;
-        const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID;
+        // Extract all variable names from body text using regex
+        const variableRegex = /\{\{([^}]+)\}\}/g;
+        let match;
+        const allVariables = [];
 
-        if (!whatsappApiUrl || !whatsappApiToken || !phoneNumberId) {
-            throw new Error('WhatsApp API configuration is missing');
+        // Find all variables
+        while ((match = variableRegex.exec(bodyText)) !== null) {
+            allVariables.push(match[1]);
         }
 
-        // Prepare the base payload
-        const payload = {
-            messaging_product: "whatsapp",
-            recipient_type: "individual",
-            to: messageData.to,
-            type: "template",
-            template: {
-                name: messageData.template,
-                language: {
-                    code: messageData.language?.code || 'en_US',
-                    policy: "deterministic"
-                },
-                components: []
+        const uniqueVars = [...new Set(allVariables)];
+
+        // Create a mapping of variables to numbered positions
+        const variableMapping = {};
+        let nextNumber = 1;
+
+        // First process existing numeric variables to maintain their numbers
+        uniqueVars.forEach(varName => {
+            if (!isNaN(varName)) {
+                const num = parseInt(varName);
+                nextNumber = Math.max(nextNumber, num + 1);
+                variableMapping[varName] = varName; // Keep numeric variables as is
             }
-        };
-
-       // Handle header component if present
-       if (messageData.header) {
-        const headerComponent = {
-            type: "header",
-            parameters: []
-        };
-
-        if (messageData.header.type === 'text') {
-            headerComponent.parameters.push({
-                type: "text",
-                text: messageData.header.content
-            });
-        } else if (['image', 'video', 'document'].includes(messageData.header.type)) {
-            // For media headers, we expect messageData.header.mediaId to be a WhatsApp media ID
-            headerComponent.parameters.push({
-                type: messageData.header.type,
-                [messageData.header.type]: {
-                    id: messageData.header.mediaId
-                }
-            });
-        }
-
-        payload.template.components.push(headerComponent);
-    }
-
-        // Handle body components
-        if (messageData.bodyParameters && messageData.bodyParameters.length > 0) {
-            payload.template.components.push({
-                type: "body",
-                parameters: messageData.bodyParameters.map(param => ({
-                    type: "text",
-                    text: param
-                }))
-            });
-        }
-
-        console.log('Final WhatsApp message payload:', JSON.stringify(payload, null, 2));
-
-        const response = await axios.post(
-            `${whatsappApiUrl}/${phoneNumberId}/messages`,
-            payload,
-            {
-                headers: {
-                    'Authorization': `Bearer ${whatsappApiToken}`,
-                    'Content-Type': 'application/json'
-                }
-            }
-        );
-        console.log("REsponse:::::::::::::::::::::::::::::::")
-        console.log(JSON.stringify(response.data, null, 2) )
-return {
-            success: true,
-            messageId: response.data?.messages?.[0]?.id,
-            status: 'sent', // Initial status
-            timestamp: new Date().toISOString(),
-            recipientId: messageData.to,
-            rawResponse: response.data
-        };
-    } catch (error) {
-        console.error('WhatsApp API Error:', error.response?.data || error.message);
-        throw new Error(
-            error.response?.data?.error?.message || 
-            'Failed to send template message'
-        );
-    }
-}   
-static async uploadMediaToWhatsApp(fileBuffer, fileType) {
-    try {
-        const whatsappApiUrl = process.env.WHATSAPP_API_URL;
-        const whatsappApiToken = process.env.WHATSAPP_API_TOKEN;
-        const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID;
-
-        if (!whatsappApiUrl || !whatsappApiToken || !phoneNumberId) {
-            throw new Error('WhatsApp API configuration is missing');
-        }
-
-        const formData = new FormData();
-        formData.append('file', fileBuffer, {
-            filename: `media.${fileType.split('/')[1]}`,
-            contentType: fileType
         });
-        formData.append('type', fileType.split('/')[0]); // 'image' or 'video'
-        formData.append('messaging_product', 'whatsapp');
 
-        const response = await axios.post(
-            `${whatsappApiUrl}/${phoneNumberId}/media`,
-            formData,
-            {
-                headers: {
-                    ...formData.getHeaders(),
-                    'Authorization': `Bearer ${whatsappApiToken}`
-                }
+        // Then assign numbers to named variables
+        uniqueVars.forEach(varName => {
+            if (isNaN(varName) && !variableMapping[varName]) {
+                variableMapping[varName] = nextNumber.toString();
+                nextNumber++;
             }
-        );
+        });
 
-        return response.data.id; // This is the WhatsApp media ID
+        console.log(bodyText);
+        // Replace all variables with numbered ones
+        const processedBody = bodyText.replace(/\{\{([^}]+)\}\}/g, (match, varName) => {
+            return `{{${variableMapping[varName]}}}`;
+        });
+
+        // Create ordered variables object with values mapped to their correct positions
+        const orderedVariables = {};
+
+        for (let i = 1; i < nextNumber; i++) {
+            // Find the variable name that maps to this number
+            const varName = Object.keys(variableMapping).find(key =>
+                variableMapping[key] === i.toString()
+            );
+
+            // Get the sample value for this variable - provide default if empty
+            if (varName) {
+                const sampleValue = variableSamples[varName];
+                // FIXED: Provide meaningful default values instead of empty strings
+                orderedVariables[i] = sampleValue && sampleValue.trim() !== '' ? 
+                    sampleValue : 
+                    `Sample${i}`; // Provide a default sample value
+            }
+        }
+
+        console.log('Variable mapping:', variableMapping);
+        console.log('Original variables:', variableSamples);
+        console.log('Ordered variables:', orderedVariables);
+
+        return {
+            processedBody,
+            variableMapping,
+            orderedVariables
+        };
     } catch (error) {
-        console.error('WhatsApp Media Upload Error:', error.response?.data || error.message);
-        throw new Error('Failed to upload media to WhatsApp');
+        console.error('Error converting variables:', error);
+        throw new Error('Failed to process template variables');
     }
 }
+
+ // Fixed method for sending template messages with proper image handling
+    static async sendTemplateMessage(messageData) {
+        try {
+            const whatsappApiUrl = process.env.WHATSAPP_API_URL;
+            const whatsappApiToken = process.env.WHATSAPP_API_TOKEN;
+            const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID;
+
+            if (!whatsappApiUrl || !whatsappApiToken || !phoneNumberId) {
+                throw new Error('WhatsApp API configuration is missing');
+            }
+
+            // Prepare the base payload
+            const payload = {
+                messaging_product: "whatsapp",
+                recipient_type: "individual",
+                to: messageData.to,
+                type: "template",
+                template: {
+                    name: messageData.template,
+                    language: {
+                        code: messageData.language?.code || 'en_US',
+                        policy: "deterministic"
+                    },
+                    components: []
+                }
+            };
+
+            // Handle header component with proper media handling for iOS
+            if (messageData.header) {
+                const headerComponent = {
+                    type: "header",
+                    parameters: []
+                };
+
+                if (messageData.header.type === 'text') {
+                    headerComponent.parameters.push({
+                        type: "text",
+                        text: messageData.header.content
+                    });
+                } else if (messageData.header.type === 'image') {
+                    // Critical fix for iOS compatibility
+                    if (!messageData.header.mediaId) {
+                        throw new Error('Media ID is required for image headers');
+                    }
+
+                    // Ensure proper image parameter structure for iOS
+                    headerComponent.parameters.push({
+                        type: "image",
+                        image: {
+                            id: messageData.header.mediaId
+                        }
+                    });
+                } else if (messageData.header.type === 'video') {
+                    headerComponent.parameters.push({
+                        type: "video",
+                        video: {
+                            id: messageData.header.mediaId
+                        }
+                    });
+                } else if (messageData.header.type === 'document') {
+                    headerComponent.parameters.push({
+                        type: "document",
+                        document: {
+                            id: messageData.header.mediaId,
+                            filename: messageData.header.filename || "document"
+                        }
+                    });
+                }
+
+                payload.template.components.push(headerComponent);
+            }
+
+            // Handle body components
+            if (messageData.bodyParameters && messageData.bodyParameters.length > 0) {
+                payload.template.components.push({
+                    type: "body",
+                    parameters: messageData.bodyParameters.map(param => ({
+                        type: "text",
+                        text: param
+                    }))
+                });
+            }
+
+            console.log('Final WhatsApp message payload:', JSON.stringify(payload, null, 2));
+
+            const response = await axios.post(
+                `${whatsappApiUrl}/${phoneNumberId}/messages`,
+                payload,
+                {
+                    headers: {
+                        'Authorization': `Bearer ${whatsappApiToken}`,
+                        'Content-Type': 'application/json'
+                    }
+                }
+            );
+
+            console.log("Response:", JSON.stringify(response.data, null, 2));
+
+            return {
+                success: true,
+                messageId: response.data?.messages?.[0]?.id,
+                status: 'sent',
+                timestamp: new Date().toISOString(),
+                recipientId: messageData.to,
+                rawResponse: response.data
+            };
+        } catch (error) {
+            console.error('WhatsApp API Error:', error.response?.data || error.message);
+            throw new Error(
+                error.response?.data?.error?.message || 
+                'Failed to send template message'
+            );
+        }
+    }
+
+    // Enhanced media upload method with iOS compatibility
+    static async uploadMediaToWhatsApp(fileBuffer, fileType, filename = null) {
+        try {
+            const whatsappApiUrl = process.env.WHATSAPP_API_URL;
+            const whatsappApiToken = process.env.WHATSAPP_API_TOKEN;
+            const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID;
+
+            if (!whatsappApiUrl || !whatsappApiToken || !phoneNumberId) {
+                throw new Error('WhatsApp API configuration is missing');
+            }
+
+            // Validate file type and size for iOS compatibility
+            const allowedImageTypes = ['image/jpeg', 'image/jpg', 'image/png'];
+            const allowedVideoTypes = ['video/mp4', 'video/3gpp'];
+            const maxImageSize = 5 * 1024 * 1024; // 5MB
+            const maxVideoSize = 16 * 1024 * 1024; // 16MB
+
+            if (fileType.startsWith('image/')) {
+                if (!allowedImageTypes.includes(fileType.toLowerCase())) {
+                    throw new Error('Unsupported image format. Use JPEG or PNG for iOS compatibility.');
+                }
+                if (fileBuffer.length > maxImageSize) {
+                    throw new Error('Image size exceeds 5MB limit');
+                }
+            } else if (fileType.startsWith('video/')) {
+                if (!allowedVideoTypes.includes(fileType.toLowerCase())) {
+                    throw new Error('Unsupported video format. Use MP4 or 3GPP for iOS compatibility.');
+                }
+                if (fileBuffer.length > maxVideoSize) {
+                    throw new Error('Video size exceeds 16MB limit');
+                }
+            }
+
+            const formData = new FormData();
+            
+            // Use proper filename with extension for iOS compatibility
+            const fileExtension = fileType.split('/')[1];
+            const actualFilename = filename || `media_${Date.now()}.${fileExtension}`;
+            
+            formData.append('file', fileBuffer, {
+                filename: actualFilename,
+                contentType: fileType
+            });
+            formData.append('type', fileType.split('/')[0]); // 'image' or 'video'
+            formData.append('messaging_product', 'whatsapp');
+
+            const response = await axios.post(
+                `${whatsappApiUrl}/${phoneNumberId}/media`,
+                formData,
+                {
+                    headers: {
+                        ...formData.getHeaders(),
+                        'Authorization': `Bearer ${whatsappApiToken}`
+                    },
+                    timeout: 30000 // 30 second timeout
+                }
+            );
+
+            console.log('Media upload response:', response.data);
+
+            if (!response.data.id) {
+                throw new Error('No media ID returned from WhatsApp API');
+            }
+
+            return response.data.id;
+        } catch (error) {
+            console.error('WhatsApp Media Upload Error:', error.response?.data || error.message);
+            throw new Error(
+                error.response?.data?.error?.message || 
+                'Failed to upload media to WhatsApp'
+            );
+        }
+    }
+
+    // Method to validate media before upload
+    static validateMediaForTemplate(file, headerType) {
+        const validations = {
+            image: {
+                allowedTypes: ['image/jpeg', 'image/jpg', 'image/png'],
+                maxSize: 5 * 1024 * 1024, // 5MB
+                aspectRatio: { min: 1, max: 3 } // Width/Height ratio
+            },
+            video: {
+                allowedTypes: ['video/mp4', 'video/3gpp'],
+                maxSize: 16 * 1024 * 1024, // 16MB
+                maxDuration: 60 // seconds
+            }
+        };
+
+        const validation = validations[headerType];
+        if (!validation) {
+            throw new Error(`Unsupported header type: ${headerType}`);
+        }
+
+        if (!validation.allowedTypes.includes(file.mimetype.toLowerCase())) {
+            throw new Error(`Invalid file type. Allowed types: ${validation.allowedTypes.join(', ')}`);
+        }
+
+        if (file.size > validation.maxSize) {
+            throw new Error(`File size exceeds ${validation.maxSize / (1024 * 1024)}MB limit`);
+        }
+
+        return true;
+    }
+
+    // Method to get media info (useful for debugging)
+    static async getMediaInfo(mediaId) {
+        try {
+            const whatsappApiUrl = process.env.WHATSAPP_API_URL;
+            const whatsappApiToken = process.env.WHATSAPP_API_TOKEN;
+
+            const response = await axios.get(
+                `${whatsappApiUrl}/${mediaId}`,
+                {
+                    headers: {
+                        'Authorization': `Bearer ${whatsappApiToken}`
+                    }
+                }
+            );
+
+            return response.data;
+        } catch (error) {
+            console.error('Error getting media info:', error.response?.data || error.message);
+            throw new Error('Failed to get media information');
+        }
+    }
+
 
 }
 
