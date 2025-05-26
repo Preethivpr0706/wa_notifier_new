@@ -167,3 +167,32 @@ ALTER TABLE campaigns ADD COLUMN field_mappings JSON;
 
 
 alter table users add column password varchar(300) default null;
+
+
+
+CREATE TABLE business_settings (
+    id VARCHAR(36) PRIMARY KEY,
+    business_id VARCHAR(36) NOT NULL,
+    whatsapp_api_token TEXT NOT NULL,
+    whatsapp_business_account_id VARCHAR(255) NOT NULL,
+    whatsapp_phone_number_id VARCHAR(255) NOT NULL,
+    facebook_app_id VARCHAR(255) NOT NULL,
+    webhook_verify_token VARCHAR(255) NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+);
+
+
+
+INSERT INTO `whatsapp_templates`.`business_settings` (`id`, `business_id`, `whatsapp_api_token`, `whatsapp_business_account_id`, `whatsapp_phone_number_id`, `facebook_app_id`, `webhook_verify_token`) VALUES ('1', '1', 'EAAHwxZB6KBfcBOzf6mb0e8S2Eum8K8QpNkNOoCRmOmWaMBznDmkgkm1p0nZCZBGve0B7gpeG7Xs9L1LAMrHKcyNdopXcQUGDnZArPGVV9dsodrFLA56WdAe6lSqmWHhLyzLIYSZCxho9OVZBY8zjbWCpPuiI3lodXxHTh8ZBpy4ZCNt3CEP5wEHSamGXmP2ZAxTQNSgZDZD', '1677607116492342', '549704921563564', '546216467891703', 'verify_token');
+
+ALTER TABLE campaigns ADD COLUMN business_id INT NOT NULL;
+ALTER TABLE messages ADD COLUMN business_id INT NOT NULL;
+ALTER TABLE templates ADD COLUMN business_id INT NOT NULL;
+
+
+SET SQL_SAFE_UPDATES = 0;
+UPDATE `whatsapp_templates`.`campaigns` SET `business_id` = '1';
+UPDATE `whatsapp_templates`.`messages` SET `business_id` = '1';
+UPDATE `whatsapp_templates`.`templates` SET `business_id` = '1';
+
