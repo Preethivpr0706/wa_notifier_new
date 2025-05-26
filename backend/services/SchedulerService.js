@@ -51,7 +51,8 @@ class SchedulerService {
                         contacts,
                         fieldMappings,
                         campaign.template_id,
-                        userId
+                        userId,
+                        campaign.business_id
                     );
 
                 } catch (error) {

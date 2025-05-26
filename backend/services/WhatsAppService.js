@@ -3,16 +3,18 @@ const axios = require('axios');
 const FormData = require('form-data');
 require('dotenv').config();
 const Template = require('../models/templateModel');
+const WhatsappConfigService = require('../services/WhatsappConfigService');
 
 class WhatsAppService {
-    static async submitTemplate(template) {
+    static async submitTemplate(template, businessConfig) {
         try {
             console.log('Template data received:', template);
-
+            //console.log(businessConfig);
             // Validate API configuration
             const whatsappApiUrl = process.env.WHATSAPP_API_URL;
-            const whatsappApiToken = process.env.WHATSAPP_API_TOKEN;
-            const businessId = process.env.WHATSAPP_BUSINESS_ACCOUNT_ID;
+            const whatsappApiToken = businessConfig.whatsapp_api_token;
+            const businessId = businessConfig.whatsapp_business_account_id;
+            //console.log(whatsappApiToken, whatsappApiUrl, businessId);
 
             if (!whatsappApiUrl || !whatsappApiToken || !businessId) {
                 throw new Error('WhatsApp API configuration is missing');
@@ -245,42 +247,18 @@ class WhatsAppService {
         });
     }
 
-    static async checkTemplateStatus(templateName) {
-        try {
-            const whatsappApiUrl = process.env.WHATSAPP_API_URL;
-            const whatsappApiToken = process.env.WHATSAPP_API_TOKEN;
-            const businessId = process.env.WHATSAPP_BUSINESS_ACCOUNT_ID;
 
-            if (!whatsappApiUrl || !whatsappApiToken || !businessId) {
-                throw new Error('WhatsApp API configuration is missing');
+    static async checkAndUpdateTemplateStatus(template, userId) {
+        try {
+            const businessConfig = await WhatsappConfigService.getConfigForUser(userId);
+
+            if (!businessConfig) {
+                throw new Error('Business configuration not found');
             }
 
-            const response = await axios.get(
-                `${whatsappApiUrl}/${businessId}/message_templates?name=${templateName}`, {
-                    headers: {
-                        'Authorization': `Bearer ${whatsappApiToken}`,
-                        'Content-Type': 'application/json'
-                    }
-                }
-            );
-
-            if (response.data.data && response.data.data.length > 0) {
-                return response.data.data[0];
-            }
-
-            return null;
-        } catch (error) {
-            console.error('WhatsApp API Error:', error.response && error.response.data || error.message);
-            throw new Error(error.response && error.response.data && error.response.data.error ? error.response.data.error.message : 'Failed to check template status');
-        }
-    }
-
-    static async checkAndUpdateTemplateStatus(template) {
-        try {
             const whatsappApiUrl = process.env.WHATSAPP_API_URL;
-            const whatsappApiToken = process.env.WHATSAPP_API_TOKEN;
-            const businessId = process.env.WHATSAPP_BUSINESS_ACCOUNT_ID;
-
+            const whatsappApiToken = businessConfig.whatsapp_api_token;
+            const businessId = businessConfig.whatsapp_business_account_id;
             if (!whatsappApiUrl || !whatsappApiToken || !businessId) {
                 throw new Error('WhatsApp API configuration is missing');
             }
@@ -336,12 +314,18 @@ class WhatsAppService {
             throw new Error('Failed to check template status');
         }
     }
-    static async deleteTemplate(whatsappId, templateName) {
+    static async deleteTemplate(whatsappId, templateName, userId) {
             try {
-                const whatsappApiUrl = process.env.WHATSAPP_API_URL;
-                const whatsappApiToken = process.env.WHATSAPP_API_TOKEN;
-                const businessId = process.env.WHATSAPP_BUSINESS_ACCOUNT_ID;
 
+                const businessConfig = await WhatsappConfigService.getConfigForUser(userId);
+
+                if (!businessConfig) {
+                    throw new Error('Business configuration not found');
+                }
+
+                const whatsappApiUrl = process.env.WHATSAPP_API_URL;
+                const whatsappApiToken = businessConfig.whatsapp_api_token;
+                const businessId = businessConfig.whatsapp_business_account_id;
                 if (!whatsappApiUrl || !whatsappApiToken || !businessId) {
                     throw new Error('WhatsApp API configuration is missing');
                 }
@@ -370,10 +354,15 @@ class WhatsAppService {
         }
         // Create a media upload session
         // In WhatsAppService.js
-    static async createMediaUploadSession(fileType, fileSize) {
+    static async createMediaUploadSession(fileType, fileSize, userId) {
         try {
-            const whatsappApiToken = process.env.WHATSAPP_API_TOKEN;
-            const appId = process.env.FACEBOOK_APP_ID;
+            const businessConfig = await WhatsappConfigService.getConfigForUser(userId);
+
+            if (!businessConfig) {
+                throw new Error('Business configuration not found');
+            }
+            const whatsappApiToken = businessConfig.whatsapp_api_token;
+            const appId = businessConfig.facebook_app_id;
 
             console.log('Creating media upload session with:', { fileType, appId });
 
@@ -415,9 +404,14 @@ class WhatsAppService {
 
 
     // Upload file to the created session
-    static async uploadFileToSession(sessionId, file) {
+    static async uploadFileToSession(sessionId, file, userId) {
             try {
-                const whatsappApiToken = process.env.WHATSAPP_API_TOKEN;
+                const businessConfig = await WhatsappConfigService.getConfigForUser(userId);
+
+                if (!businessConfig) {
+                    throw new Error('Business configuration not found');
+                }
+                const whatsappApiToken = businessConfig.whatsapp_api_token;
                 if (!whatsappApiToken) throw new Error('Missing WhatsApp API token');
 
                 // Extract base session ID and signature
@@ -491,7 +485,7 @@ class WhatsAppService {
      // Update existing template on WhatsApp
    
 // Fixed updateTemplate method in WhatsAppService.js
-static async updateTemplate(whatsappId, template, originalTemplate) {
+static async updateTemplate(whatsappId, template, originalTemplate, userId) {
     try {
         // Check if name, category, or language were modified
         if (
@@ -501,8 +495,12 @@ static async updateTemplate(whatsappId, template, originalTemplate) {
         ) {
             throw new Error("Cannot update template: Name, category, or language cannot be changed after WhatsApp submission.");
         }
-        
-        const whatsappApiToken = process.env.WHATSAPP_API_TOKEN;
+         const businessConfig = await WhatsappConfigService.getConfigForUser(userId);
+
+            if (!businessConfig) {
+                throw new Error('Business configuration not found');
+            }
+        const whatsappApiToken = businessConfig.whatsapp_api_token;
 
         if (!whatsappApiToken || !whatsappId) {
             throw new Error('WhatsApp API configuration is missing or template ID is invalid');
@@ -744,11 +742,16 @@ static convertVariablesForWhatsApp(bodyText, variableSamples = {}) {
 }
 
  // Fixed method for sending template messages with proper image handling
-    static async sendTemplateMessage(messageData) {
+    static async sendTemplateMessage(messageData, userId) {
         try {
+            // Get business-specific configuration
+           const config = await WhatsappConfigService.getConfigForUser(userId);
+            if (!config) {
+                throw new Error('WhatsApp configuration not found');
+            }
             const whatsappApiUrl = process.env.WHATSAPP_API_URL;
-            const whatsappApiToken = process.env.WHATSAPP_API_TOKEN;
-            const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID;
+            const whatsappApiToken = config.whatsapp_api_token;
+            const phoneNumberId = config.whatsapp_phone_number_id;
 
             if (!whatsappApiUrl || !whatsappApiToken || !phoneNumberId) {
                 throw new Error('WhatsApp API configuration is missing');
@@ -859,11 +862,17 @@ static convertVariablesForWhatsApp(bodyText, variableSamples = {}) {
     }
 
     // Enhanced media upload method with iOS compatibility
-    static async uploadMediaToWhatsApp(fileBuffer, fileType, filename = null) {
+    static async uploadMediaToWhatsApp(userId, fileBuffer, fileType, filename = null) {
         try {
+const businessConfig = await WhatsappConfigService.getConfigForUser(userId);
+
+            if (!businessConfig) {
+                throw new Error('Business configuration not found');
+            }
+            
             const whatsappApiUrl = process.env.WHATSAPP_API_URL;
-            const whatsappApiToken = process.env.WHATSAPP_API_TOKEN;
-            const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID;
+            const whatsappApiToken = businessConfig.whatsapp_api_token;
+            const phoneNumberId = businessConfig.whatsapp_phone_number_id;
 
             if (!whatsappApiUrl || !whatsappApiToken || !phoneNumberId) {
                 throw new Error('WhatsApp API configuration is missing');
@@ -964,10 +973,15 @@ static convertVariablesForWhatsApp(bodyText, variableSamples = {}) {
     }
 
     // Method to get media info (useful for debugging)
-    static async getMediaInfo(mediaId) {
+    static async getMediaInfo(mediaId, userId) {
         try {
+            const businessConfig = await WhatsappConfigService.getConfigForUser(userId);
+
+            if (!businessConfig) {
+                throw new Error('Business configuration not found');
+            }
             const whatsappApiUrl = process.env.WHATSAPP_API_URL;
-            const whatsappApiToken = process.env.WHATSAPP_API_TOKEN;
+            const whatsappApiToken = businessConfig.whatsapp_api_token;
 
             const response = await axios.get(
                 `${whatsappApiUrl}/${mediaId}`,

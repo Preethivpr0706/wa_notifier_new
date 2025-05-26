@@ -9,6 +9,17 @@ const apiClient = axios.create({
         'Content-Type': 'application/json'
     }
 });
+apiClient.interceptors.response.use(
+  response => response,
+  error => {
+    if (error.response?.status === 401) {
+      // Token is invalid or expired
+      authService.logout();
+      window.location.href = '/login'; // Force full page reload to clear state
+    }
+    return Promise.reject(error);
+  }
+);
 
 export const authService = {
     login: async (credentials) => {

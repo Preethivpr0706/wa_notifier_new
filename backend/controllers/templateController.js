@@ -1,6 +1,7 @@
 // controllers/templateController.js
 const Template = require('../models/templateModel');
 const WhatsAppService = require('../services/WhatsAppService');
+const WhatsappConfigService = require('../services/WhatsappConfigService');
 
 class TemplateController {
     // Create a new template and submit for approval
@@ -21,11 +22,18 @@ class TemplateController {
                 };
 
                 // First create the template in our database
-                let template = await Template.create(templateData, userId);
+                let template = await Template.create(templateData, userId, req.user.businessId);
+
+                const businessConfig = await WhatsappConfigService.getConfigForUser(userId);
+
+                if (!businessConfig) {
+                    throw new Error('Business configuration not found');
+                }
+
 
                 try {
                     // Submit to WhatsApp API
-                    const whatsappResponse = await WhatsAppService.submitTemplate(template);
+                    const whatsappResponse = await WhatsAppService.submitTemplate(template, businessConfig);
 
                     // Update our template with WhatsApp ID and status
                     template = await Template.updateStatus(
@@ -120,7 +128,7 @@ class TemplateController {
             templates = await Promise.all(templates.map(async(template) => {
                 if (template.status === 'pending' && template.whatsapp_id) {
                     try {
-                        const statusUpdate = await WhatsAppService.checkAndUpdateTemplateStatus(template);
+                        const statusUpdate = await WhatsAppService.checkAndUpdateTemplateStatus(template, defaultUserId);
                         if (statusUpdate.status !== template.status) {
                             return await Template.updateStatus(template.id, statusUpdate.status, {
                                 whatsapp_status: statusUpdate.whatsappStatus,
@@ -231,7 +239,8 @@ class TemplateController {
                     const whatsappResponse = await WhatsAppService.updateTemplate(
                         existingTemplate.whatsapp_id,
                         whatsappPayload,
-                        existingTemplate // Pass original template for validation
+                        existingTemplate, // Pass original template for validation
+                        userId
                     );
 
                     // Update the category in our database based on WhatsApp's response
@@ -296,7 +305,8 @@ class TemplateController {
                 try {
                     await WhatsAppService.deleteTemplate(
                         template.whatsapp_id,
-                        template.name // Pass the template name as second parameter
+                        template.name, // Pass the template name as second parameter
+                        userId
                     );
                 } catch (whatsappError) {
                     console.error('Failed to delete from WhatsApp API:', whatsappError);
@@ -355,10 +365,16 @@ class TemplateController {
 
             // Update status in database
             await Template.submitForApproval(templateId, userId);
+            const businessConfig = await WhatsappConfigService.getConfigForUser(userId);
+
+            if (!businessConfig) {
+                throw new Error('Business configuration not found');
+            }
+
 
             // Submit to WhatsApp API
             try {
-                const whatsappResponse = await WhatsAppService.submitTemplate(template);
+                const whatsappResponse = await WhatsAppService.submitTemplate(template, businessConfig);
                 res.status(200).json({
                     success: true,
                     message: 'Template submitted for approval',
@@ -428,8 +444,14 @@ class TemplateController {
                     buttons: template.buttons
                 };
 
+                const businessConfig = await WhatsappConfigService.getConfigForUser(userId);
+
+                if (!businessConfig) {
+                    throw new Error('Business configuration not found');
+                }
+
                 // 2. Submit to WhatsApp
-                const whatsappResponse = await WhatsAppService.submitTemplate(transformedTemplate);
+                const whatsappResponse = await WhatsAppService.submitTemplate(transformedTemplate, businessConfig);
 
                 // 3. Update template status
                 const updatedTemplate = await Template.updateStatus(
@@ -513,7 +535,7 @@ class TemplateController {
 
                 // Only check status for pending templates with WhatsApp ID
                 if (template.status === 'pending' && template.whatsapp_id) {
-                    const statusUpdate = await WhatsAppService.checkAndUpdateTemplateStatus(template);
+                    const statusUpdate = await WhatsAppService.checkAndUpdateTemplateStatus(template, userId);
 
                     // Update our database with the new status
                     const updatedTemplate = await Template.updateStatus(
@@ -564,8 +586,9 @@ class TemplateController {
 
             // Upload to WhatsApp and get the media ID
             const whatsappMediaId = await WhatsAppService.uploadMediaToWhatsApp(
+                req.user.id,
                 file.buffer,
-                file.mimetype
+                file.mimetype,
             );
 
             // You might want to store this media ID in your database

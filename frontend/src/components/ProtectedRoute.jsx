@@ -1,17 +1,22 @@
 // src/components/ProtectedRoute.jsx
 import { Navigate, Outlet } from 'react-router-dom';
 import { authService } from '../api/authService';
+import { useEffect, useState } from 'react';
 
 function ProtectedRoute({ children }) {
-    const isAuthenticated = authService.isAuthenticated();
+  const [isAuthenticated, setIsAuthenticated] = useState(authService.isAuthenticated());
 
-    if (!isAuthenticated) {
-        // Redirect to login if not authenticated
-        return <Navigate to="/login" replace />;
-    }
+  useEffect(() => {
+    // Check authentication status when component mounts
+    setIsAuthenticated(authService.isAuthenticated());
+  }, []);
 
-    // If there are children, render them, otherwise render the Outlet
-    return children ? children : <Outlet />;
+  if (!isAuthenticated) {
+    // Redirect to login if not authenticated
+    return <Navigate to="/login" replace />;
+  }
+
+  return children ? children : <Outlet />;
 }
 
 export default ProtectedRoute;

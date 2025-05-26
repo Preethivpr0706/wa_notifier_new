@@ -3,6 +3,7 @@ const WhatsAppService = require('../services/WhatsAppService');
 const Campaign = require('../models/campaignModel');
 const Contact = require('../controllers/ContactController');
 const Template = require('../models/templateModel');
+const WhatsappConfigService = require('../services/WhatsappConfigService');
 const { v4: uuidv4 } = require('uuid');
 
 const { pool } = require('../config/database'); // Add this at the top
@@ -21,6 +22,7 @@ class MessageController {
                     scheduledAt
                 } = req.body;
                 const userId = req.user.id;
+                const businessId = req.user.businessId;
 
                 // Validate required fields
                 if (!templateId) {
@@ -104,6 +106,7 @@ class MessageController {
                     status: sendNow ? 'sending' : 'scheduled',
                     scheduledAt: sendNow ? null : scheduledAt,
                     userId,
+                    businessId,
                     contacts: targetContacts, // Add these
                     fieldMappings, // Add these
                     recipientCount: targetContacts.length,
@@ -163,12 +166,13 @@ class MessageController {
 
                             // To this:
                             // Send message
-                            const sendResult = await WhatsAppService.sendTemplateMessage(message);
+                            const sendResult = await WhatsAppService.sendTemplateMessage(message, userId);
 
                             // Create message record with initial status
                             await MessageController.createMessageRecord({
                                 messageId: sendResult.messageId,
                                 campaignId: campaign.id,
+                                businessId,
                                 contactId: contact.id,
                                 status: sendResult.status, // Use status from response
                                 error: sendResult.error,
@@ -191,6 +195,7 @@ class MessageController {
                             await MessageController.createMessageRecord({
                                 messageId: `failed-${Date.now()}`,
                                 campaignId: campaign.id,
+                                businessId,
                                 contactId: contact.id,
                                 status: 'failed',
                                 error: error.message
@@ -238,13 +243,13 @@ class MessageController {
             }
         }
         // Add this helper method to MessageController
-    static async createMessageRecord({ messageId, campaignId, contactId, status, error = null }) {
+    static async createMessageRecord({ messageId, campaignId, businessId, contactId, status, error = null }) {
         const connection = await pool.getConnection();
         try {
             const [result] = await connection.execute(
                 `INSERT INTO messages 
-             (id, campaign_id, contact_id, status, error, created_at, updated_at)
-             VALUES (?, ?, ?, ?, ?, NOW(), NOW())`, [messageId, campaignId, contactId, status, error]
+             (id, campaign_id,business_id, contact_id, status, error, created_at, updated_at)
+             VALUES (?, ?, ?, ?,?, ?, NOW(), NOW())`, [messageId, campaignId, businessId, contactId, status, error]
             );
             console.log(`Created message record for ${messageId}`);
             return result;
@@ -261,36 +266,59 @@ class MessageController {
         }
     }
     static async verifyWebhook(req, res) {
-            try {
-                const mode = req.query['hub.mode'];
-                const token = req.query['hub.verify_token'];
-                const challenge = req.query['hub.challenge'];
+        try {
+            const mode = req.query['hub.mode'];
+            const token = req.query['hub.verify_token'];
+            const challenge = req.query['hub.challenge'];
 
-                const verifyToken = process.env.WHATSAPP_WEBHOOK_VERIFY_TOKEN;
-
-                if (mode && token) {
-                    if (mode === 'subscribe' && token === verifyToken) {
-                        console.log('WEBHOOK_VERIFIED');
-                        return res.status(200).send(challenge);
-                    }
-                }
-
+            if (!mode || !token) {
                 return res.sendStatus(403);
-            } catch (error) {
-                console.error('Webhook verification failed:', error);
-                return res.sendStatus(500);
             }
+
+            // Get business config by verify token
+            const [businessConfig] = await pool.execute(
+                `SELECT * FROM business_settings 
+             WHERE webhook_verify_token = ?`, [token]
+            );
+
+            if (!businessConfig || businessConfig.length === 0) {
+                console.log('Invalid verify token:', token);
+                return res.sendStatus(403);
+            }
+
+            if (mode === 'subscribe' && token === businessConfig[0].webhook_verify_token) {
+                console.log('WEBHOOK_VERIFIED for business:', businessConfig[0].business_id);
+                return res.status(200).send(challenge);
+            }
+
+            return res.sendStatus(403);
+        } catch (error) {
+            console.error('Webhook verification failed:', error);
+            return res.sendStatus(500);
         }
-        // controllers/messageController.js
-        // controllers/messageController.js
+    }
+
 
     static async handleWebhook(req, res) {
         try {
+            console.log('Raw webhook payload:', JSON.stringify(req.body, null, 2)); // Log full payload
             const { entry } = req.body;
             res.status(200).send('EVENT_RECEIVED');
-
+            console.log(JSON.stringify(entry, 2));
             for (const item of entry) {
+                // Get business ID from phone number ID
+                const phoneNumberId = item.changes[0] && item.changes[0].value && item.changes[0].value.metadata && item.changes[0].value.metadata.phone_number_id ? item.changes[0].value.metadata.phone_number_id : null;
+                if (!phoneNumberId) continue;
+
+                // Get business settings
+                const [settings] = await pool.execute(
+                    'SELECT business_id FROM business_settings WHERE whatsapp_phone_number_id = ?', [phoneNumberId]
+                );
+
+                if (!settings.length) continue;
+                const businessId = settings[0].business_id;
                 for (const change of item.changes) {
+
                     if (change.value.statuses) {
                         for (const status of change.value.statuses) {
                             try {
@@ -469,7 +497,7 @@ class MessageController {
         }
         // controllers/messageController.js
 
-    static async processCampaignMessages(campaignId, contacts, fieldMappings, templateId, userId) {
+    static async processCampaignMessages(campaignId, contacts, fieldMappings, templateId, userId, business_id) {
             // Get template
             const template = await Template.getByIdForSending(templateId, userId);
 
@@ -512,14 +540,14 @@ class MessageController {
                     }
 
 
-
                     // Send message
-                    const sendResult = await WhatsAppService.sendTemplateMessage(message);
+                    const sendResult = await WhatsAppService.sendTemplateMessage(message, userId);
 
                     // Create message record
                     await MessageController.createMessageRecord({
                         messageId: sendResult.messageId,
                         campaignId,
+                        business_id,
                         contactId: contact.id,
                         status: sendResult.status,
                         error: sendResult.error,
@@ -536,6 +564,7 @@ class MessageController {
                     await MessageController.createMessageRecord({
                         messageId: `failed-${Date.now()}`,
                         campaignId,
+                        business_id,
                         contactId: contact.id,
                         status: 'failed',
                         error: error.message
@@ -557,6 +586,7 @@ class MessageController {
             } = req.body;
 
             const userId = req.user.id;
+            const businessId = req.user.businessId;
 
             // Validate required fields
             if (!templateId) {
@@ -580,6 +610,7 @@ class MessageController {
                 status: 'draft',
                 scheduledAt,
                 userId,
+                businessId,
                 contacts,
                 fieldMappings,
                 recipientCount: contacts.length

@@ -52,6 +52,7 @@ class Campaign {
                 status = 'draft',
                 scheduledAt = null,
                 userId,
+                businessId,
                 contacts, // Add these
                 fieldMappings, // Add these
                 recipientCount = 0
@@ -69,16 +70,17 @@ class Campaign {
             // Insert campaign with contacts and mappings
             await connection.execute(
                 `INSERT INTO campaigns (
-                id, name, template_id, status, scheduled_at, user_id,
+                id, name, template_id, status, scheduled_at, user_id,business_id,
                 recipient_count, delivered_count, read_count,
                 contacts, field_mappings
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, [
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?,?, ?, ?)`, [
                     campaignId,
                     name,
                     templateId,
                     status,
                     formattedScheduledAt,
                     userId,
+                    businessId,
                     recipientCount,
                     0,
                     0,

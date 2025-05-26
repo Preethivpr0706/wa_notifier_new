@@ -15,6 +15,7 @@ class CampaignController {
         try {
             const { name, templateId, status, scheduledAt } = req.body;
             const userId = req.user.id; // From auth middleware
+            const businessId = req.user.businessId;
 
             // Validate required fields
             if (!name || !templateId) {
@@ -29,7 +30,8 @@ class CampaignController {
                 templateId,
                 status: status || 'draft',
                 scheduledAt: scheduledAt || null,
-                userId
+                userId,
+                businessId
             };
 
             const campaign = await Campaign.create(campaignData);

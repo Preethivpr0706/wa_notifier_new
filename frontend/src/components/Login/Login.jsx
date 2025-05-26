@@ -30,6 +30,12 @@ function Login() {
 
     const handleSubmit = async (e) => {
         e.preventDefault();
+
+  
+  // Clear any existing tokens before new login attempt
+  localStorage.removeItem('token');
+  localStorage.removeItem('user');
+  sessionStorage.clear();
         setError(null);
         setIsLoading(true);
 

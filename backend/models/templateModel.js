@@ -4,7 +4,7 @@ const { v4: uuidv4 } = require('uuid');
 
 class Template {
     // Create a new template
-    static async create(templateData, userId) {
+    static async create(templateData, userId, businessId) {
         const connection = await pool.getConnection();
         try {
             await connection.beginTransaction();
@@ -26,10 +26,10 @@ class Template {
             await connection.execute(
                 `INSERT INTO templates (
                 id, name, category, language, header_type, header_content, 
-                body_text, footer_text, status, user_id, variables
-              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, [
+                body_text, footer_text, status, user_id, variables, business_id
+              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,?)`, [
                     templateId, name, category, language, headerType, headerContent,
-                    bodyText, footerText, status, userId, templateData.variables
+                    bodyText, footerText, status, userId, templateData.variables, businessId
                 ]
             );
 

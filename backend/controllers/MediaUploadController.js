@@ -18,7 +18,7 @@ class MediaUploadController {
                 }
 
                 // Call WhatsApp API to create upload session
-                const sessionData = await WhatsAppService.createMediaUploadSession(fileType, fileSize);
+                const sessionData = await WhatsAppService.createMediaUploadSession(fileType, fileSize, req.user.id);
                 console.log('Session data from WhatsApp:', sessionData);
 
                 // Ensure we have the required data
@@ -70,11 +70,12 @@ class MediaUploadController {
 
             // Upload to WhatsApp
             const result = await WhatsAppService.uploadFileToSession(sessionId, {
-                buffer: file.buffer,
-                originalname: file.originalname,
-                mimetype: file.mimetype,
-                size: file.size
-            });
+                    buffer: file.buffer,
+                    originalname: file.originalname,
+                    mimetype: file.mimetype,
+                    size: file.size
+                },
+                req.user.id);
 
             if (!result.success || !result.h) {
                 throw new Error('Upload failed or no handle received');
