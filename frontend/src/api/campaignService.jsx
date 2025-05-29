@@ -57,5 +57,24 @@ export const campaignService = {
         } catch (error) {
             throw new Error(error.response?.data?.message || 'Failed to update campaign');
         }
+    },
+    // Add this method to campaignService
+getCampaignWithStats: async (id) => {
+    try {
+        const response = await apiClient.get(`/campaigns/${id}/stats`);
+        return response.data;
+    } catch (error) {
+        throw new Error(error.response?.data?.message || 'Failed to fetch campaign with stats');
     }
+},
+getCampaignRecipients: async (id, filters = {}) => {
+    try {
+        const response = await apiClient.get(`/campaigns/${id}/recipients`, {
+            params: filters
+        });
+        return response.data;
+    } catch (error) {
+        throw new Error(error.response?.data?.message || 'Failed to fetch campaign recipients');
+    }
+},
   };

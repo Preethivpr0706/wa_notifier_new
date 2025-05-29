@@ -11,5 +11,8 @@ router.put('/:id/status', CampaignController.updateCampaignStatus);
 router.put('/:id/stats', CampaignController.updateCampaignStats);
 router.delete('/:id', CampaignController.deleteCampaign);
 router.put('/:id', CampaignController.updateCampaign);
+// Add this route
+router.get('/:id/stats', CampaignController.getCampaignWithStats);
+router.get('/:id/recipients', CampaignController.getCampaignRecipients);
 
 module.exports = router;

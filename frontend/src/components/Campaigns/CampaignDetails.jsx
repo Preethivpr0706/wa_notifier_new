@@ -22,25 +22,32 @@ function CampaignDetails() {
   const [searchQuery, setSearchQuery] = useState('');
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [showPauseModal, setShowPauseModal] = useState(false);
+  // Add state for pagination
+const [recipientsPage, setRecipientsPage] = useState(1);
+const [recipientsLimit] = useState(20);
+const [totalRecipients, setTotalRecipients] = useState(0);
+// Add this with your other state declarations
+const [recipients, setRecipients] = useState([]);
+const [isLoadingRecipients, setIsLoadingRecipients] = useState(false);
 
   // Fetch campaign details
   const fetchCampaignDetails = useCallback(async () => {
     try {
-      setIsLoading(true);
-      setError(null);
-      
-      const response = await campaignService.getCampaignById(id);
-      setCampaign(response.data);
-      return response.data;
+        setIsLoading(true);
+        setError(null);
+        
+        const response = await campaignService.getCampaignWithStats(id);
+        setCampaign(response.data);
+        return response.data;
     } catch (err) {
-      console.error('Error fetching campaign details:', err);
-      setError('Failed to load campaign details: ' + (err.message || 'Unknown error'));
-      throw err;
+        console.error('Error fetching campaign details:', err);
+        setError('Failed to load campaign details: ' + (err.message || 'Unknown error'));
+        throw err;
     } finally {
-      setIsLoading(false);
-      setIsRefreshing(false);
+        setIsLoading(false);
+        setIsRefreshing(false);
     }
-  }, [id]);
+}, [id]);
 
   useEffect(() => {
     let intervalId;
@@ -146,75 +153,74 @@ function CampaignDetails() {
   };
 
   // Get message statistics
-  const getMessageStats = () => {
+const getMessageStats = () => {
     if (!campaign) return null;
     
     return [
-      {
-        label: 'Recipients',
-        value: campaign.recipientCount?.toLocaleString() || '0',
-        icon: <Users size={20} />,
-        color: 'var(--neutral-700)'
-      },
-      {
-        label: 'Delivered',
-        value: campaign.deliveredCount?.toLocaleString() || '0',
-        percentage: calculatePercentage(campaign.deliveredCount, campaign.recipientCount),
-        icon: <Mail size={20} />,
-        color: 'var(--primary-color)'
-      },
-      {
-        label: 'Read',
-        value: campaign.readCount?.toLocaleString() || '0',
-        percentage: calculatePercentage(campaign.readCount, campaign.deliveredCount),
-        icon: <CheckCircle size={20} />,
-        color: 'var(--success-color)'
-      },
-      {
-        label: 'Failed',
-        value: campaign.failedCount?.toLocaleString() || '0',
-        percentage: calculatePercentage(campaign.failedCount, campaign.recipientCount),
-        icon: <XCircle size={20} />,
-        color: 'var(--error-color)'
-      },
-      {
-        label: 'Responses',
-        value: campaign.responseCount?.toLocaleString() || '0',
-        percentage: calculatePercentage(campaign.responseCount, campaign.deliveredCount),
-        icon: <MessageSquare size={20} />,
-        color: 'var(--accent-color)'
-      }
+        {
+            label: 'Recipients',
+            value: campaign.recipient_count?.toLocaleString() || '0',
+            icon: <Users size={20} />,
+            color: 'var(--neutral-700)'
+        },
+        {
+            label: 'Delivered',
+            value: campaign.delivered_count?.toLocaleString() || '0',
+            percentage: calculatePercentage(campaign.delivered_count, campaign.recipient_count),
+            icon: <Mail size={20} />,
+            color: 'var(--primary-color)'
+        },
+        {
+            label: 'Read',
+            value: campaign.read_count?.toLocaleString() || '0',
+            percentage: calculatePercentage(campaign.read_count, campaign.delivered_count),
+            icon: <CheckCircle size={20} />,
+            color: 'var(--success-color)'
+        },
+        {
+            label: 'Failed',
+            value: campaign.failed_count?.toLocaleString() || '0',
+            percentage: calculatePercentage(campaign.failed_count, campaign.recipient_count),
+            icon: <XCircle size={20} />,
+            color: 'var(--error-color)'
+        },
+        {
+            label: 'Responses',
+            value: campaign.responseCount?.toLocaleString() || '0',
+            percentage: calculatePercentage(campaign.responseCount, campaign.delivered_count),
+            icon: <MessageSquare size={20} />,
+            color: 'var(--accent-color)'
+        }
     ];
-  };
+};
 
-  // Mock recipient data
-  const getRecipientsData = useCallback(() => {
-    if (!campaign) return [];
-    
-   const mockRecipients = Array(campaign.recipientCount || 0).fill().map((_, index) => ({
-  id: `rec-${index}`,
-  phoneNumber: `+1234567${String(index).padStart(4, '0')}`,
-  name: `Contact ${index + 1}`,
-  status: index % 10 === 0 ? 'failed' : 
-          index % 5 === 0 ? 'pending' : 
-          index % 3 === 0 ? 'delivered' : 'read',
-  deliveredAt: index % 5 !== 0 ? new Date(Date.now() - Math.random() * 86400000).toISOString() : null,
-  readAt: index % 3 === 0 ? new Date(Date.now() - Math.random() * 43200000).toISOString() : null,
-  error: index % 10 === 0 ? 'Phone number not registered with WhatsApp' : null
-}));
-    
-    const filteredRecipients = mockRecipients.filter(recipient => {
-      if (recipientFilter === 'all') return true;
-      return recipient.status === recipientFilter;
-    });
-    
-    return filteredRecipients.filter(recipient => 
-      recipient.phoneNumber.includes(searchQuery) || 
-      recipient.name.toLowerCase().includes(searchQuery.toLowerCase())
-    );
-  }, [campaign, recipientFilter, searchQuery]);
+const fetchRecipients = useCallback(async () => {
+    try {
+        setIsLoadingRecipients(true);
+        const response = await campaignService.getCampaignRecipients(id, {
+            status: recipientFilter === 'all' ? undefined : recipientFilter,
+            search: searchQuery,
+            page: recipientsPage,
+            limit: recipientsLimit
+        });
+        
+        setTotalRecipients(response.data.total);
+        setRecipients(response.data.recipients);
+    } catch (error) {
+        console.error('Error fetching recipients:', error);
+        setRecipients([]);
+        setError(error.message);
+    } finally {
+        setIsLoadingRecipients(false);
+    }
+}, [id, recipientFilter, searchQuery, recipientsPage, recipientsLimit]);
 
-  const filteredRecipients = getRecipientsData();
+// Add this useEffect to fetch recipients when needed
+useEffect(() => {
+    if (activeTab === 'recipients') {
+        fetchRecipients();
+    }
+}, [activeTab, fetchRecipients]);
 
   if (isLoading && !campaign) {
     return (
@@ -416,12 +422,12 @@ function CampaignDetails() {
                     <div className="progress-bar">
                       <div 
                         className="progress-fill delivered" 
-                        style={{ width: calculatePercentage(campaign?.deliveredCount, campaign?.recipientCount) }}
+                        style={{ width: calculatePercentage(campaign?.delivered_count, campaign?.recipient_count) }}
                       ></div>
                     </div>
                     <div className="progress-labels">
-                      <span>Delivered: {campaign?.deliveredCount?.toLocaleString() || '0'}</span>
-                      <span>{calculatePercentage(campaign?.deliveredCount, campaign?.recipientCount)}</span>
+                      <span>Delivered: {campaign?.delivered_count?.toLocaleString() || '0'}</span>
+                      <span>{calculatePercentage(campaign?.delivered_count, campaign?.recipient_count)}</span>
                     </div>
                   </div>
                   
@@ -429,12 +435,12 @@ function CampaignDetails() {
                     <div className="progress-bar">
                       <div 
                         className="progress-fill read" 
-                        style={{ width: calculatePercentage(campaign?.readCount, campaign?.recipientCount) }}
+                        style={{ width: calculatePercentage(campaign?.read_count, campaign?.recipient_count) }}
                       ></div>
                     </div>
                     <div className="progress-labels">
-                      <span>Read: {campaign?.readCount?.toLocaleString() || '0'}</span>
-                      <span>{calculatePercentage(campaign?.readCount, campaign?.recipientCount)}</span>
+                      <span>Read: {campaign?.read_count?.toLocaleString() || '0'}</span>
+                      <span>{calculatePercentage(campaign?.read_count, campaign?.recipient_count)}</span>
                     </div>
                   </div>
                   
@@ -442,12 +448,12 @@ function CampaignDetails() {
                     <div className="progress-bar">
                       <div 
                         className="progress-fill failed" 
-                        style={{ width: calculatePercentage(campaign?.failedCount, campaign?.recipientCount) }}
+                        style={{ width: calculatePercentage(campaign?.failed_count, campaign?.recipient_count) }}
                       ></div>
                     </div>
                     <div className="progress-labels">
-                      <span>Failed: {campaign?.failedCount?.toLocaleString() || '0'}</span>
-                      <span>{calculatePercentage(campaign?.failedCount, campaign?.recipientCount)}</span>
+                      <span>Failed: {campaign?.failed_count?.toLocaleString() || '0'}</span>
+                      <span>{calculatePercentage(campaign?.failed_count, campaign?.recipient_count)}</span>
                     </div>
                   </div>
                 </div>
@@ -458,11 +464,11 @@ function CampaignDetails() {
                 <div className="response-chart">
                   <div className="donut-chart">
                     <div className="donut-fill" style={{ 
-                      '--percentage': campaign?.responseCount && campaign?.deliveredCount ? 
-                        (campaign.responseCount / campaign.deliveredCount) * 100 : 0 
+                      '--percentage': campaign?.responseCount && campaign?.delivered_count ? 
+                        (campaign.responseCount / campaign.delivered_count) * 100 : 0 
                     }}></div>
                     <div className="donut-center">
-                      {calculatePercentage(campaign?.responseCount, campaign?.deliveredCount)}
+                      {calculatePercentage(campaign?.responseCount, campaign?.delivered_count)}
                     </div>
                   </div>
                   <div className="response-legend">
@@ -474,7 +480,7 @@ function CampaignDetails() {
                     <div className="legend-item">
                       <div className="legend-color no-response"></div>
                       <span>No Response</span>
-                      <strong>{((campaign?.deliveredCount || 0) - (campaign?.responseCount || 0)).toLocaleString()}</strong>
+                      <strong>{((campaign?.delivered_count || 0) - (campaign?.responseCount || 0)).toLocaleString()}</strong>
                     </div>
                   </div>
                 </div>
@@ -495,12 +501,12 @@ function CampaignDetails() {
                    campaign?.status === 'partial' ? ' was partially completed.' : ''}
                 </p>
                 <p>
-                  Message template used: <strong>{campaign?.templateName}</strong><br />
-                  Total recipients: <strong>{campaign?.recipientCount?.toLocaleString() || '0'}</strong><br />
-                  Delivered messages: <strong>{campaign?.deliveredCount?.toLocaleString() || '0'} ({calculatePercentage(campaign?.deliveredCount, campaign?.recipientCount)})</strong><br />
-                  Read messages: <strong>{campaign?.readCount?.toLocaleString() || '0'} ({calculatePercentage(campaign?.readCount, campaign?.deliveredCount)})</strong><br />
-                  Failed messages: <strong>{campaign?.failedCount?.toLocaleString() || '0'} ({calculatePercentage(campaign?.failedCount, campaign?.recipientCount)})</strong><br />
-                  Responses received: <strong>{campaign?.responseCount?.toLocaleString() || '0'} ({calculatePercentage(campaign?.responseCount, campaign?.deliveredCount)})</strong>
+                  Message template used: <strong>{campaign?.template_name}</strong><br />
+                  Total recipients: <strong>{campaign?.recipient_count?.toLocaleString() || '0'}</strong><br />
+                  Delivered messages: <strong>{campaign?.delivered_count?.toLocaleString() || '0'} ({calculatePercentage(campaign?.delivered_count, campaign?.recipient_count)})</strong><br />
+                  Read messages: <strong>{campaign?.read_count?.toLocaleString() || '0'} ({calculatePercentage(campaign?.read_count, campaign?.delivered_count)})</strong><br />
+                  Failed messages: <strong>{campaign?.failed_count?.toLocaleString() || '0'} ({calculatePercentage(campaign?.failed_count, campaign?.recipient_count)})</strong><br />
+                  Responses received: <strong>{campaign?.responseCount?.toLocaleString() || '0'} ({calculatePercentage(campaign?.responseCount, campaign?.delivered_count)})</strong>
                 </p>
               </div>
             </div>
@@ -513,37 +519,52 @@ function CampaignDetails() {
             <div className="recipients-header">
               <div className="recipients-filters">
                 <div className="filter-group">
-                  <button 
-                    className={`filter-button ${recipientFilter === 'all' ? 'active' : ''}`}
-                    onClick={() => setRecipientFilter('all')}
-                  >
-                    All
-                  </button>
-                  <button 
-                    className={`filter-button ${recipientFilter === 'delivered' ? 'active' : ''}`}
-                    onClick={() => setRecipientFilter('delivered')}
-                  >
-                    Delivered
-                  </button>
-                  <button 
-                    className={`filter-button ${recipientFilter === 'read' ? 'active' : ''}`}
-                    onClick={() => setRecipientFilter('read')}
-                  >
-                    Read
-                  </button>
-                  <button 
-                    className={`filter-button ${recipientFilter === 'pending' ? 'active' : ''}`}
-                    onClick={() => setRecipientFilter('pending')}
-                  >
-                    Pending
-                  </button>
-                  <button 
-                    className={`filter-button ${recipientFilter === 'failed' ? 'active' : ''}`}
-                    onClick={() => setRecipientFilter('failed')}
-                  >
-                    Failed
-                  </button>
-                </div>
+  <button 
+    className={`filter-button ${recipientFilter === 'all' ? 'active' : ''}`}
+    onClick={() => {
+      setRecipientFilter('all');
+      setRecipientsPage(1); // Reset to first page when changing filters
+    }}
+  >
+    All
+  </button>
+  <button 
+    className={`filter-button ${recipientFilter === 'delivered' ? 'active' : ''}`}
+    onClick={() => {
+      setRecipientFilter('delivered');
+      setRecipientsPage(1);
+    }}
+  >
+    Delivered
+  </button>
+  <button 
+    className={`filter-button ${recipientFilter === 'read' ? 'active' : ''}`}
+    onClick={() => {
+      setRecipientFilter('read');
+      setRecipientsPage(1);
+    }}
+  >
+    Read
+  </button>
+  <button 
+    className={`filter-button ${recipientFilter === 'pending' ? 'active' : ''}`}
+    onClick={() => {
+      setRecipientFilter('pending');
+      setRecipientsPage(1);
+    }}
+  >
+    Pending
+  </button>
+  <button 
+    className={`filter-button ${recipientFilter === 'failed' ? 'active' : ''}`}
+    onClick={() => {
+      setRecipientFilter('failed');
+      setRecipientsPage(1);
+    }}
+  >
+    Failed
+  </button>
+</div>
                 
                 <div className="search-container">
                   <Search size={16} className="search-icon" />
@@ -572,78 +593,118 @@ function CampaignDetails() {
                     <th>Status</th>
                     <th>Delivered At</th>
                     <th>Read At</th>
+                    <th>Failed At</th>
                     <th>Error</th>
                   </tr>
                 </thead>
-                <tbody>
-                  {filteredRecipients.slice(0, 20).map((recipient) => (
-                    <tr key={recipient.id}>
-                      <td>{recipient.phoneNumber}</td>
-                      <td>{recipient.name}</td>
-                      <td>
-                        <span className={`status-badge ${recipient.status}`}>
-                          {recipient.status.charAt(0).toUpperCase() + recipient.status.slice(1)}
-                        </span>
-                      </td>
-                      <td>{recipient.deliveredAt ? formatDate(recipient.deliveredAt) : '-'}</td>
-                      <td>{recipient.readAt ? formatDate(recipient.readAt) : '-'}</td>
-                      <td className="error-cell">{recipient.error || '-'}</td>
-                    </tr>
-                  ))}
-                </tbody>
+               <tbody>
+    {recipients.map((recipient) => (
+        <tr key={recipient.id}>
+            <td>{recipient.phoneNumber}</td>
+            <td>{recipient.name}</td>
+           <td>
+    <span className={`status-badge ${recipient.status}`}>
+        {recipient.status.charAt(0).toUpperCase() + recipient.status.slice(1)}
+    </span>
+</td>
+<td>{recipient.deliveredAt ? formatDate(recipient.deliveredAt) : '-'}</td>
+<td>{recipient.readAt ? formatDate(recipient.readAt) : '-'}</td>
+<td>{recipient.failedAt ? formatDate(recipient.failedAt) : '-'}</td>
+<td className="error-cell">{recipient.error || '-'}</td>
+        </tr>
+    ))}
+</tbody>
               </table>
-              
-              {filteredRecipients.length === 0 && (
-                <div className="empty-table">
-                  <Inbox size={36} />
-                  <p>No recipients match your filters</p>
-                </div>
-              )}
+              {error && (
+    <div className="error-message">
+        <AlertTriangle size={16} />
+        <span>{error}</span>
+    </div>
+)}
+           
+{isLoadingRecipients ? (
+    <div className="loading-state">
+        <div className="spinner"></div>
+        <p>Loading recipients...</p>
+    </div>
+) : (
+    <>
+        <table className="recipients-table">
+            {/* Table content */}
+        </table>
+        {recipients.length === 0 && !isLoadingRecipients && (
+            <div className="empty-table">
+                <Inbox size={36} />
+                <p>No recipients match your filters</p>
+            </div>
+        )}
+    </>
+)}
             </div>
             
-            <div className="pagination">
-              <button className="btn-icon page-btn" disabled>
-                &laquo; Previous
-              </button>
-              <span className="page-info">Page 1 of {Math.ceil(filteredRecipients.length / 20)}</span>
-              <button className="btn-icon page-btn" disabled={filteredRecipients.length <= 20}>
-                Next &raquo;
-              </button>
-            </div>
+           <div className="pagination">
+    <button 
+        className="btn-icon page-btn" 
+        disabled={recipientsPage === 1 || isLoadingRecipients}
+        onClick={() => {
+            setRecipientsPage(p => p - 1);
+            fetchRecipients();
+        }}
+    >
+        &laquo; Previous
+    </button>
+    <span className="page-info">
+        Page {recipientsPage} of {Math.ceil(totalRecipients / recipientsLimit)}
+    </span>
+    <button 
+        className="btn-icon page-btn" 
+        disabled={recipientsPage * recipientsLimit >= totalRecipients || isLoadingRecipients}
+        onClick={() => {
+            setRecipientsPage(p => p + 1);
+            fetchRecipients();
+        }}
+    >
+        Next &raquo;
+    </button>
+</div>
           </div>
         )}
 
         {/* Engagement Tab */}
         {activeTab === 'engagement' && (
           <div className="engagement-tab">
-            <div className="engagement-stats">
-              <div className="engagement-stat-card">
-                <h4>Average Time to Read</h4>
-                <div className="stat-value">
-                  <Clock size={24} />
-                  <span>14 min</span>
-                </div>
-                <p className="stat-description">Average time between delivery and read</p>
-              </div>
-              
-              <div className="engagement-stat-card">
-                <h4>Response Rate</h4>
-                <div className="stat-value">
-                  <MessageSquare size={24} />
-                  <span>{calculatePercentage(campaign?.responseCount, campaign?.deliveredCount)}</span>
-                </div>
-                <p className="stat-description">Percentage of delivered messages that received a response</p>
-              </div>
-              
-              <div className="engagement-stat-card">
-                <h4>Read Rate</h4>
-                <div className="stat-value">
-                  <CheckCircle size={24} />
-                  <span>{calculatePercentage(campaign?.readCount, campaign?.deliveredCount)}</span>
-                </div>
-                <p className="stat-description">Percentage of delivered messages that were read</p>
-              </div>
-            </div>
+           <div className="engagement-stats">
+    <div className="engagement-stat-card">
+        <h4>Average Time to Read</h4>
+        <div className="stat-value">
+            <Clock size={24} />
+            <span>
+                {campaign?.avg_read_time ? 
+                    `${Math.round(campaign.avg_read_time / 60)} min` : 
+                    'N/A'}
+            </span>
+        </div>
+        <p className="stat-description">Average time between delivery and read</p>
+    </div>
+    
+    <div className="engagement-stat-card">
+        <h4>Response Rate</h4>
+        <div className="stat-value">
+            <MessageSquare size={24} />
+            <span>{calculatePercentage(campaign?.responseCount, campaign?.delivered_count)}</span>
+        </div>
+        <p className="stat-description">Percentage of delivered messages that received a response</p>
+    </div>
+    
+    <div className="engagement-stat-card">
+        <h4>Read Rate</h4>
+        <div className="stat-value">
+            <CheckCircle size={24} />
+            <span>{calculatePercentage(campaign?.read_count, campaign?.delivered_count)}</span>
+        </div>
+        <p className="stat-description">Percentage of delivered messages that were read</p>
+    </div>
+</div>
             
             <div className="chart-card engagement-chart">
               <h4>Engagement Timeline</h4>
@@ -717,81 +778,103 @@ function CampaignDetails() {
         )}
 
         {/* Message Tab */}
-        {activeTab === 'message' && (
-          <div className="message-tab">
-            <div className="message-preview">
-              <h4>Message Template Preview</h4>
-              <div className="whatsapp-preview">
-                <div className="whatsapp-header">
-                  <div className="contact-info">
-                    <div className="profile-picture"></div>
-                    <div className="contact-name">{campaign?.templateName || 'Template Preview'}</div>
-                  </div>
-                </div>
-                <div className="message-container">
-                  <div className="message-bubble">
-                    Hello {{name}},<br/><br/>
-                    Thank you for your interest in our services. We're excited to let you know about our latest offerings.<br/><br/>
-                    {campaign?.templateContent || "This is a placeholder for the actual template content that would be sent to recipients."}
-                    <br/><br/>
-                    If you have any questions, feel free to respond to this message or call us at {{business_phone}}.
-                    <div className="message-time">12:45 PM</div>
-                  </div>
-                </div>
-              </div>
-            </div>
-            
-            <div className="template-details">
-              <h4>Template Details</h4>
-              <div className="template-info">
-                <div className="info-row">
-                  <span className="info-label">Status:</span>
-                  <span className="info-value">Approved</span>
-                </div>
-                <div className="info-row">
-                  <span className="info-label">Language:</span>
-                  <span className="info-value">English</span>
-                </div>
-                <div className="info-row">
-                  <span className="info-label">Variables:</span>
-                  <span className="info-value">name, business_phone, expiry_date</span>
-                </div>
-              </div>
-            </div>
-            
-            <div className="message-parameters">
-              <h4>Message Parameters</h4>
-              <div className="parameters-table-container">
-                <table className="parameters-table">
-                  <thead>
-                    <tr>
-                      <th>Parameter</th>
-                      <th>Description</th>
-                      <th>Example Value</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr>
-                      <td>{{name}}</td>
-                      <td>Recipient's name</td>
-                      <td>John Smith</td>
-                    </tr>
-                    <tr>
-                      <td>{{business_phone}}</td>
-                      <td>Business contact number</td>
-                      <td>+1 555-123-4567</td>
-                    </tr>
-                    <tr>
-                      <td>{{expiry_date}}</td>
-                      <td>Offer expiration date</td>
-                      <td>May 30, 2025</td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-            </div>
+        {/* Message Tab */}
+{activeTab === 'message' && (
+  <div className="message-tab">
+    <div className="message-preview">
+      <h4>Message Template Preview</h4>
+      <div className="whatsapp-preview">
+        <div className="whatsapp-header">
+          <div className="contact-info">
+            <div className="profile-picture"></div>
+            <div className="contact-name">{campaign?.template?.name || 'Template Preview'}</div>
           </div>
-        )}
+        </div>
+        <div className="message-container">
+          <div className="message-bubble">
+            {/* Header content if exists */}
+            {campaign?.template?.header_type === 'text' && campaign?.template?.header_content && (
+              <div className="template-header">
+                {campaign.template.header_content}
+              </div>
+            )}
+            
+            {/* Body content */}
+            <div className="template-body">
+              {campaign?.template?.body_text || "No template content available"}
+            </div>
+
+            {/* Footer content if exists */}
+            {campaign?.template?.footer_text && (
+              <div className="template-footer">
+                {campaign.template.footer_text}
+              </div>
+            )}
+
+            {/* Buttons if they exist */}
+            {campaign?.template?.buttons && campaign.template.buttons.length > 0 && (
+              <div className="template-buttons">
+                {campaign.template.buttons.map((button, index) => (
+                  <div key={index} className="template-button">
+                    {button.text}
+                  </div>
+                ))}
+              </div>
+            )}
+            <div className="message-time">12:45 PM</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    
+    <div className="template-details">
+      <h4>Template Details</h4>
+      <div className="template-info">
+        <div className="info-row">
+          <span className="info-label">Name:</span>
+          <span className="info-value">{campaign?.template?.name}</span>
+        </div>
+        <div className="info-row">
+          <span className="info-label">Category:</span>
+          <span className="info-value">{campaign?.template?.category}</span>
+        </div>
+        <div className="info-row">
+          <span className="info-label">Language:</span>
+          <span className="info-value">{campaign?.template?.language}</span>
+        </div>
+        <div className="info-row">
+          <span className="info-label">Status:</span>
+          <span className="info-value">{campaign?.template?.whatsapp_status}</span>
+        </div>
+      </div>
+    </div>
+    
+    {campaign?.template?.variables && Object.keys(campaign.template.variables).length > 0 && (
+      <div className="message-parameters">
+        <h4>Template Variables</h4>
+        <div className="parameters-table-container">
+          <table className="parameters-table">
+            <thead>
+              <tr>
+                <th>Variable</th>
+                <th>Sample Value</th>
+              </tr>
+            </thead>
+            <tbody>
+              {Object.entries(campaign.template.variables).map(([key, value]) => (
+                <tr key={key}>
+                  <td>{'{{'}{key}{'}}'}</td>
+                  <td>{value}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    )}
+  </div>
+)}
+
       </div>
 
       {/* Delete Confirmation Modal */}

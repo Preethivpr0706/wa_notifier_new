@@ -1,61 +1,80 @@
 .stat-card {
-  display: flex;
-  align-items: center;
-  gap: 16px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
 }
 
 .stat-icon {
-  width: 48px;
-  height: 48px;
-  border-radius: var(--border-radius-md);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--white);
+    width: 48px;
+    height: 48px;
+    border-radius: var(--border-radius-md);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--white);
 }
 
 .stat-card.blue .stat-icon {
-  background-color: var(--primary-color);
+    background-color: var(--primary-color);
 }
 
 .stat-card.green .stat-icon {
-  background-color: var(--accent-color);
+    background-color: var(--accent-color);
 }
 
 .stat-card.purple .stat-icon {
-  background-color: #A78BFA;
+    background-color: #A78BFA;
 }
 
 .stat-card.yellow .stat-icon {
-  background-color: var(--warning-color);
+    background-color: var(--warning-color);
 }
 
 .stat-content {
-  display: flex;
-  flex-direction: column;
+    display: flex;
+    flex-direction: column;
 }
 
 .stat-title {
-  font-size: 14px;
-  color: var(--neutral-600);
+    font-size: 14px;
+    color: var(--neutral-600);
 }
 
 .stat-value {
-  font-size: 24px;
-  font-weight: 600;
-  color: var(--neutral-900);
-  margin: 4px 0;
+    font-size: 24px;
+    font-weight: 600;
+    color: var(--neutral-900);
+    margin: 4px 0;
 }
 
 .stat-change {
-  font-size: 12px;
-  font-weight: 500;
+    font-size: 12px;
+    font-weight: 500;
 }
 
 .stat-change.positive {
-  color: var(--success-color);
+    color: var(--success-color);
 }
 
 .stat-change.negative {
-  color: var(--error-color);
+    color: var(--error-color);
+}
+
+
+/* StatCard.css */
+
+.stat-sub-value {
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+    margin-top: 0.25rem;
+}
+
+.stat-card.success .stat-icon {
+    background-color: var(--success-color-light);
+    color: var(--success-color);
+}
+
+.stat-card.error .stat-icon {
+    background-color: var(--error-color-light);
+    color: var(--error-color);
 }

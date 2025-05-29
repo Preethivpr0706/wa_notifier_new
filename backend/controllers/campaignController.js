@@ -1,5 +1,6 @@
 const Campaign = require('../models/campaignModel');
 const { pool } = require('../config/database');
+const UrlTrackingService = require('../services/UrlTrackingService');
 
 function determineCampaignStatus({ recipientCount, deliveredCount, failedCount }) {
     const totalProcessed = (deliveredCount || 0) + (failedCount || 0);
@@ -240,10 +241,93 @@ class CampaignController {
         }
     }
     static async updateCampaign(req, res) {
+            try {
+                const { id } = req.params;
+                const userId = req.user.id;
+                const updateData = req.body;
+
+                // Verify campaign exists and belongs to user
+                const campaign = await Campaign.getById(id, userId);
+                if (!campaign) {
+                    return res.status(404).json({
+                        success: false,
+                        message: 'Campaign not found'
+                    });
+                }
+
+                if (campaign.status !== 'draft') {
+                    return res.status(400).json({
+                        success: false,
+                        message: 'Only draft campaigns can be edited'
+                    });
+                }
+
+                // Update campaign
+                await Campaign.update(id, updateData);
+
+                res.json({
+                    success: true,
+                    message: 'Campaign updated successfully'
+                });
+            } catch (error) {
+                console.error('Error updating campaign:', error);
+                res.status(500).json({
+                    success: false,
+                    message: 'Failed to update campaign',
+                    error: error.message
+                });
+            }
+        }
+        // Add this to CampaignController.js
+        // Update getCampaignWithStats in CampaignController.js
+    static async getCampaignWithStats(req, res) {
+            try {
+                const { id } = req.params;
+                const userId = req.user.id;
+
+                // Get campaign details
+                const campaign = await Campaign.getById(id, userId);
+                if (!campaign) {
+                    return res.status(404).json({
+                        success: false,
+                        message: 'Campaign not found'
+                    });
+                }
+                // Get template details
+                const templateDetails = await Campaign.getTemplateDetails(campaign.template_id);
+
+                // Get click statistics for the campaign
+                const clickStats = await UrlTrackingService.getClickStats(campaign.template_id, id);
+                const responseCount = clickStats.reduce((sum, stat) => sum + (stat.click_count || 0), 0);
+
+                // Get engagement stats
+                const engagementStats = await Campaign.getCampaignStats(id);
+
+                // Return enriched campaign data
+                res.json({
+                    success: true,
+                    data: {
+                        ...campaign,
+                        template: templateDetails,
+                        responseCount,
+                        avg_read_time: engagementStats.avg_read_time
+                    }
+                });
+            } catch (error) {
+                console.error('Error fetching campaign with stats:', error);
+                res.status(500).json({
+                    success: false,
+                    message: 'Failed to fetch campaign details',
+                    error: error.message
+                });
+            }
+        }
+        // Add this method to CampaignController.js
+    static async getCampaignRecipients(req, res) {
         try {
             const { id } = req.params;
             const userId = req.user.id;
-            const updateData = req.body;
+            const { status, search, page = 1, limit = 20 } = req.query;
 
             // Verify campaign exists and belongs to user
             const campaign = await Campaign.getById(id, userId);
@@ -254,25 +338,51 @@ class CampaignController {
                 });
             }
 
-            if (campaign.status !== 'draft') {
-                return res.status(400).json({
-                    success: false,
-                    message: 'Only draft campaigns can be edited'
-                });
+            const filters = {
+                status,
+                search,
+                limit: parseInt(limit),
+                offset: (parseInt(page) - 1) * parseInt(limit)
+            };
+
+            const recipients = await Campaign.getRecipients(id, filters);
+
+            // Get filtered total count
+            let countQuery = `SELECT COUNT(DISTINCT m.id) as total 
+                         FROM messages m
+                         JOIN contacts c ON m.contact_id = c.id
+                         WHERE m.campaign_id = ?`;
+            const countParams = [id];
+
+            if (status) {
+                countQuery += ` AND (m.status = ? OR EXISTS (
+                SELECT 1 FROM message_status_history 
+                WHERE message_id = m.id AND status = ?
+            ))`;
+                countParams.push(status, status);
             }
 
-            // Update campaign
-            await Campaign.update(id, updateData);
+            if (search) {
+                countQuery += ' AND (c.wanumber LIKE ? OR CONCAT(c.fname, " ", c.lname) LIKE ?)';
+                countParams.push(`%${search}%`, `%${search}%`);
+            }
+
+            const [total] = await pool.execute(countQuery, countParams);
 
             res.json({
                 success: true,
-                message: 'Campaign updated successfully'
+                data: {
+                    recipients,
+                    total: total[0].total,
+                    page: parseInt(page),
+                    limit: parseInt(limit)
+                }
             });
         } catch (error) {
-            console.error('Error updating campaign:', error);
+            console.error('Error fetching campaign recipients:', error);
             res.status(500).json({
                 success: false,
-                message: 'Failed to update campaign',
+                message: 'Failed to fetch campaign recipients',
                 error: error.message
             });
         }

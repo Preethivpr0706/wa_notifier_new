@@ -169,7 +169,7 @@ ALTER TABLE campaigns ADD COLUMN field_mappings JSON;
 alter table users add column password varchar(300) default null;
 
 
-
+--------------------------------
 CREATE TABLE business_settings (
     id VARCHAR(36) PRIMARY KEY,
     business_id VARCHAR(36) NOT NULL,
@@ -196,3 +196,24 @@ UPDATE `whatsapp_templates`.`campaigns` SET `business_id` = '1';
 UPDATE `whatsapp_templates`.`messages` SET `business_id` = '1';
 UPDATE `whatsapp_templates`.`templates` SET `business_id` = '1';
 
+-- Add a new table for tracking URLs
+CREATE TABLE tracked_urls (
+    id VARCHAR(36) PRIMARY KEY,
+    template_id VARCHAR(36) NOT NULL,
+    original_url TEXT NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+);
+
+-- Add a table to track clicks per campaign
+CREATE TABLE url_clicks (
+    id VARCHAR(36) PRIMARY KEY,
+    tracked_url_id VARCHAR(36) NOT NULL,
+    campaign_id VARCHAR(36) NOT NULL,
+    clicked_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Add index for better performance
+CREATE INDEX idx_url_clicks ON url_clicks(tracked_url_id, campaign_id);
+
+ALTER TABLE campaigns DROP FOREIGN KEY campaigns_ibfk_1;

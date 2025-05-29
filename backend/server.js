@@ -40,6 +40,22 @@ app.use('/api/campaigns', authenticate, campaignRoutes);
 
 app.use('/api/business', authenticate, businessRoutes);
 
+
+const redirectRoutes = require('./routes/redirectRoutes');
+app.use('/api/redirect', redirectRoutes);
+
+// server.js
+const dashboardRoutes = require('./routes/dashboardRoutes');
+
+// Add this with your other routes
+app.use('/api/dashboard', authenticate, dashboardRoutes);
+
+
+// Error handling
+app.use((req, res, next) => {
+    console.log('404 - Route not found:', req.originalUrl);
+    res.status(404).send('Route not found');
+});
 // Add to your server initialization code
 setInterval(async() => {
     try {

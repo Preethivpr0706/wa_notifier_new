@@ -93,48 +93,58 @@ class WhatsAppService {
             }
 
             // Buttons component
+            // Fixed buttons component section
             if (template.buttons && template.buttons.length > 0) {
                 const buttonsComponent = {
                     type: "BUTTONS",
                     buttons: template.buttons.map(button => {
-                        // Common button properties
-                        const buttonConfig = {
-                            text: button.text
-                        };
+                            // Common button properties
+                            const buttonConfig = {
+                                text: button.text
+                            };
 
-                        // Set type-specific properties
-                        switch (button.type) {
-                            case 'phone_number':
-                                if (!button.text || !button.value) {
-                                    throw new Error('Phone button must have both display text and phone number');
-                                }
-                                return {
-                                    ...buttonConfig,
-                                    type: 'PHONE_NUMBER',
-                                    text: button.text, // Display text
-                                    phone_number: button.value // Actual phone number
-                                };
+                            // Set type-specific properties
+                            switch (button.type) {
+                                case 'phone_number':
+                                    if (!button.text || !button.value) {
+                                        throw new Error('Phone button must have both display text and phone number');
+                                    }
+                                    return {
+                                        ...buttonConfig,
+                                        type: 'PHONE_NUMBER',
+                                        text: button.text,
+                                        phone_number: button.value
+                                    };
 
-                            case 'url':
-                                if (!button.value) throw new Error('URL button must have a URL');
-                                return {
-                                    ...buttonConfig,
-                                    type: 'URL',
-                                    text: button.text,
-                                    url: button.value
-                                };
+                                case 'url':
+                                    if (!button.value) throw new Error('URL button must have a URL');
+                                    const urlButton = {
+                                        ...buttonConfig,
+                                        type: 'URL',
+                                        text: button.text,
+                                        url: button.value
+                                    };
 
-                            case 'quick_reply':
-                                return {
-                                    ...buttonConfig,
-                                    type: 'QUICK_REPLY',
-                                    text: button.text,
-                                };
+                                    // Add example if URL contains variables
+                                    // FIXED: Use array of strings, not nested arrays
+                                    if (button.value.includes('{{')) {
+                                        urlButton.example = ["ABC123XYZ"]; // Correct format
+                                    }
 
-                            default:
-                                throw new Error(`Invalid button type: ${button.type}`);
-                        }
-                    })
+                                    return urlButton;
+
+                                case 'quick_reply':
+                                    return {
+                                        ...buttonConfig,
+                                        type: 'QUICK_REPLY',
+                                        text: button.text,
+                                    };
+
+                                default:
+                                    throw new Error(`Invalid button type: ${button.type}`);
+                            }
+                        })
+                        // REMOVED: Component-level example that was causing the error
                 };
                 components.push(buttonsComponent);
             }
@@ -742,7 +752,7 @@ static convertVariablesForWhatsApp(bodyText, variableSamples = {}) {
 }
 
  // Fixed method for sending template messages with proper image handling
-    static async sendTemplateMessage(messageData, userId) {
+    static async sendTemplateMessage(messageData, userId, campaignId) {
         try {
             // Get business-specific configuration
            const config = await WhatsappConfigService.getConfigForUser(userId);
@@ -774,7 +784,7 @@ static convertVariablesForWhatsApp(bodyText, variableSamples = {}) {
             };
 
             // Handle header component with proper media handling for iOS
-            if (messageData.header) {
+       /*     if (messageData.header) {
                 const headerComponent = {
                     type: "header",
                     parameters: []
@@ -816,7 +826,61 @@ static convertVariablesForWhatsApp(bodyText, variableSamples = {}) {
                 }
 
                 payload.template.components.push(headerComponent);
+            }*/
+           // Handle header component with proper media handling for iOS
+if (messageData.header) {
+    // Only add header component if it's not a simple text header
+    // or if it contains variables (indicated by {{)
+    if (messageData.header.type !== 'text' || messageData.header.content.includes('{{')) {
+        const headerComponent = {
+            type: "header",
+            parameters: []
+        };
+
+        if (messageData.header.type === 'text') {
+            // Only add parameters for text headers with variables
+            if (messageData.header.content.includes('{{')) {
+                headerComponent.parameters.push({
+                    type: "text",
+                    text: messageData.header.content
+                });
             }
+        } else if (messageData.header.type === 'image') {
+            // Critical fix for iOS compatibility
+            if (!messageData.header.mediaId) {
+                throw new Error('Media ID is required for image headers');
+            }
+
+            headerComponent.parameters.push({
+                type: "image",
+                image: {
+                    id: messageData.header.mediaId
+                }
+            });
+        } else if (messageData.header.type === 'video') {
+            headerComponent.parameters.push({
+                type: "video",
+                video: {
+                    id: messageData.header.mediaId
+                }
+            });
+        } else if (messageData.header.type === 'document') {
+            headerComponent.parameters.push({
+                type: "document",
+                document: {
+                    id: messageData.header.mediaId,
+                    filename: messageData.header.filename || "document"
+                }
+            });
+        }
+
+        // Only add the header component if we have parameters
+        if (headerComponent.parameters.length > 0) {
+            payload.template.components.push(headerComponent);
+        }
+    }
+}
+
 
             // Handle body components
             if (messageData.bodyParameters && messageData.bodyParameters.length > 0) {
@@ -828,7 +892,22 @@ static convertVariablesForWhatsApp(bodyText, variableSamples = {}) {
                     }))
                 });
             }
+          // Handle button components
+if (messageData.buttons) {
+    const buttonComponent = {
+        type: "button",
+        sub_type: "url",
+        index: "0",  // Since we're dealing with URL parameter
+        parameters: [
+            {
+                type: "text",
+                text: campaignId || '0'
+            }
+        ]
+    };
 
+    payload.template.components.push(buttonComponent);
+}
             console.log('Final WhatsApp message payload:', JSON.stringify(payload, null, 2));
 
             const response = await axios.post(

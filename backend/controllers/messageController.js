@@ -34,6 +34,17 @@ class MessageController {
 
                 // Normalize audience_type to lowercase
                 const normalizedAudienceType = audience_type ? audience_type.toLowerCase() : null;
+                // Check for URL buttons
+                const urlButtonResult = await pool.execute(`
+        SELECT 1 
+        FROM template_buttons tb 
+        WHERE tb.template_id = ? 
+        AND tb.type = 'url'
+        LIMIT 1
+    `, [templateId]);
+                console.log(urlButtonResult);
+
+                const hasUrlButton = urlButtonResult != null;
 
                 // Validate audience type
                 const validAudienceTypes = ['all', 'list', 'custom'];
@@ -164,9 +175,14 @@ class MessageController {
                                 }
                             }
 
+
+                            // Handle buttons - just indicate if we have URL buttons that need parameters
+                            if (hasUrlButton) {
+                                message.buttons = true; // Just indicate we have buttons that need parameters
+                            }
                             // To this:
                             // Send message
-                            const sendResult = await WhatsAppService.sendTemplateMessage(message, userId);
+                            const sendResult = await WhatsAppService.sendTemplateMessage(message, userId, campaign.id);
 
                             // Create message record with initial status
                             await MessageController.createMessageRecord({
@@ -541,7 +557,7 @@ class MessageController {
 
 
                     // Send message
-                    const sendResult = await WhatsAppService.sendTemplateMessage(message, userId);
+                    const sendResult = await WhatsAppService.sendTemplateMessage(message, userId, campaignId);
 
                     // Create message record
                     await MessageController.createMessageRecord({

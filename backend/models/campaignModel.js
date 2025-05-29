@@ -478,6 +478,116 @@ class Campaign {
             connection.release();
         }
     }
+    static async getCampaignStats(campaignId) {
+        const [stats] = await pool.execute(
+            `SELECT 
+            AVG(TIMESTAMPDIFF(SECOND, m.timestamp, m.updated_at)) as avg_read_time
+         FROM messages m
+         WHERE m.campaign_id = ? 
+         AND m.status = 'delivered'
+         AND m.timestamp IS NOT NULL
+         AND m.updated_at IS NOT NULL`, [campaignId]
+        );
+
+        return stats[0] || { avg_read_time: null };
+    }
+    static async getRecipients(campaignId, filters = {}) {
+        let query = `
+    SELECT 
+        m.id,
+        c.wanumber as phoneNumber,
+        CONCAT(c.fname, ' ', c.lname) as name,
+        m.status,
+        MAX(CASE WHEN msh.status = 'delivered' THEN msh.created_at END) as deliveredAt,
+        MAX(CASE WHEN msh.status = 'read' THEN msh.created_at END) as readAt,
+        MAX(CASE WHEN msh.status = 'failed' THEN msh.created_at END) as failedAt,
+        m.error
+    FROM messages m
+    JOIN contacts c ON m.contact_id = c.id
+    LEFT JOIN message_status_history msh ON m.id = msh.message_id
+    WHERE m.campaign_id = ?
+    `;
+
+        const params = [campaignId];
+
+        if (filters.status) {
+            // Handle both message status and status history
+            query += ` AND (m.status = ? OR EXISTS (
+            SELECT 1 FROM message_status_history 
+            WHERE message_id = m.id AND status = ?
+        ))`;
+            params.push(filters.status, filters.status);
+        }
+
+        if (filters.search) {
+            query += ' AND (c.wanumber LIKE ? OR CONCAT(c.fname, " ", c.lname) LIKE ?)';
+            params.push(`%${filters.search}%`, `%${filters.search}%`);
+        }
+
+        query += ` GROUP BY m.id, c.wanumber, c.fname, c.lname, m.status, m.error
+              ORDER BY m.created_at DESC 
+              LIMIT ${filters.limit || 20} 
+              OFFSET ${filters.offset || 0}`;
+
+        const [recipients] = await pool.execute(query, params);
+        return recipients;
+    }
+    static async getTemplateDetails(templateId) {
+        const [templates] = await pool.execute(
+            `SELECT 
+                t.id,
+                t.name,
+                t.category,
+                t.language,
+                t.header_type,
+                t.header_content,
+                t.body_text,
+                t.footer_text,
+                t.variables,
+                t.whatsapp_status,
+                (
+                    SELECT JSON_ARRAYAGG(
+                        JSON_OBJECT(
+                            'id', tb.id,
+                            'type', tb.type,
+                            'text', tb.text,
+                            'value', tb.value,
+                            'button_order', tb.button_order
+                        )
+                    )
+                    FROM template_buttons tb
+                    WHERE tb.template_id = t.id
+                    ORDER BY tb.button_order
+                ) as buttons
+            FROM templates t
+            WHERE t.id = ?`, [templateId]
+        );
+
+        if (templates.length === 0) {
+            return null;
+        }
+
+        const template = templates[0];
+
+        // Parse JSON fields
+        if (template.variables) {
+            try {
+                template.variables = JSON.parse(template.variables);
+            } catch (e) {
+                template.variables = {};
+            }
+        }
+
+        if (template.buttons) {
+            try {
+                template.buttons = JSON.parse(template.buttons);
+            } catch (e) {
+                template.buttons = [];
+            }
+        }
+
+        return template;
+    }
 
 }
 

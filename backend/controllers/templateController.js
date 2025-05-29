@@ -2,12 +2,15 @@
 const Template = require('../models/templateModel');
 const WhatsAppService = require('../services/WhatsAppService');
 const WhatsappConfigService = require('../services/WhatsappConfigService');
+const UrlTrackingService = require('../services/UrlTrackingService');
+const { pool } = require('../config/database');
 
 class TemplateController {
     // Create a new template and submit for approval
     static async createTemplate(req, res) {
             try {
                 const userId = req.user.id;
+                const isProduction = process.env.NODE_ENV === 'production';
 
                 const templateData = {
                     name: req.body.name,
@@ -21,8 +24,37 @@ class TemplateController {
                     variables: JSON.stringify(req.body.variableSamples || {})
                 };
 
-                // First create the template in our database
+
+
+                // Create template in database
                 let template = await Template.create(templateData, userId, req.user.businessId);
+                // Process buttons to replace URLs with tracking URLs
+                if (templateData.buttons) {
+                    for (const button of templateData.buttons) {
+                        if (button.type === 'url') {
+                            button.value = await UrlTrackingService.getOrCreateTrackingUrl(
+                                template.id, // We don't have template ID yet
+                                button.value,
+                                isProduction
+                            );
+                        }
+                    }
+                }
+
+                // Update tracking URLs with the actual template ID
+                if (templateData.buttons) {
+                    for (const button of templateData.buttons) {
+                        if (button.type === 'url' && button.value.includes('/redirect/')) {
+                            const trackingId = button.value.split('/redirect/')[1].split('?')[0];
+                            await pool.execute(
+                                `UPDATE tracked_urls 
+                         SET template_id = ? 
+                         WHERE id = ?`, [template.id, trackingId]
+                            );
+                        }
+                    }
+                }
+
 
                 const businessConfig = await WhatsappConfigService.getConfigForUser(userId);
 
@@ -205,7 +237,17 @@ class TemplateController {
                 header_content: req.body.headerContent || req.body.header_content,
                 header_type: req.body.headerType || req.body.header_type
             };
-
+            // Process buttons to replace URLs with tracking URLs
+            if (templateData.buttons) {
+                for (const button of templateData.buttons) {
+                    if (button.type === 'url') {
+                        button.value = await UrlTrackingService.getOrCreateTrackingUrl(
+                            templateId,
+                            button.value
+                        );
+                    }
+                }
+            }
             // 1. Get existing template
             const existingTemplate = await Template.getById(templateId, userId);
             if (!existingTemplate) {

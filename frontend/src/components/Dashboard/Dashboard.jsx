@@ -6,108 +6,146 @@ import {
   Activity, 
   TrendingUp, 
   Users, 
-  Calendar
+  Calendar,
+  CheckCircle,
+  XCircle
 } from 'lucide-react';
 import StatCard from './StatCard';
 import DeliveryChart from './DeliveryChart';
 import CampaignTable from './CampaignTable';
 import './Dashboard.css';
+import { useState, useEffect } from 'react';
+import { dashboardService } from '../../api/dashboardService';
 
 function Dashboard() {
-  const stats = [
-    {
-      title: 'Total Campaigns',
-      value: '24',
-      change: '+12%',
-      icon: <MessagesSquare />,
-      color: 'blue'
-    },
-    {
-      title: 'Messages Sent',
-      value: '12,543',
-      change: '+25%',
-      icon: <Zap />,
-      color: 'green'
-    },
-    {
-      title: 'Templates Created',
-      value: '18',
-      change: '+5%',
-      icon: <FileText />,
-      color: 'purple'
-    },
-    {
-      title: 'Success Rate',
-      value: '97.8%',
-      change: '+0.5%',
-      icon: <Activity />,
-      color: 'yellow'
-    }
-  ];
+  const [dashboardData, setDashboardData] = useState({
+    stats: null,
+    recentCampaigns: [],
+    topTemplates: [],
+    messageStats: null,
+    isLoading: true,
+    error: null
+  });
 
-  const recentCampaigns = [
-    {
-      id: 1,
-      name: 'May Product Launch',
-      template: 'Product Launch Announcement',
-      recipients: 2500,
-      status: 'Sent',
-      date: '2 days ago'
-    },
-    {
-      id: 2,
-      name: 'Weekend Flash Sale',
-      template: 'Limited Time Offer',
-      recipients: 5000,
-      status: 'Scheduled',
-      date: 'Tomorrow'
-    },
-    {
-      id: 3,
-      name: 'Customer Feedback Survey',
-      template: 'Survey Request',
-      recipients: 1200,
-      status: 'Sent',
-      date: '5 days ago'
-    },
-    {
-      id: 4,
-      name: 'Webinar Registration',
-      template: 'Event Invitation',
-      recipients: 3800,
-      status: 'Failed',
-      date: '1 day ago'
+  const fetchDashboardData = async () => {
+    try {
+      const [stats, campaigns, templates, messageStats] = await Promise.all([
+        dashboardService.getDashboardStats(),
+        dashboardService.getRecentCampaigns(),
+        dashboardService.getTopTemplates(),
+        dashboardService.getMessageStats()
+      ]);
+
+      setDashboardData({
+        stats: stats.data,
+        recentCampaigns: campaigns.data,
+        topTemplates: templates.data,
+        messageStats: messageStats.data,
+        isLoading: false,
+        error: null
+      });
+    } catch (error) {
+      setDashboardData(prev => ({
+        ...prev,
+        isLoading: false,
+        error: error.message
+      }));
     }
-  ];
+  };
+
+  useEffect(() => {
+    fetchDashboardData();
+  }, []);
+
+  if (dashboardData.isLoading) {
+    return <div className="loading-state">Loading dashboard data...</div>;
+  }
+
+  if (dashboardData.error) {
+    return <div className="error-state">Error: {dashboardData.error}</div>;
+  }
+
+  const { stats, recentCampaigns, topTemplates, messageStats } = dashboardData;
+
+  // In Dashboard.jsx, modify the statsCards creation:
+const statsCards = [
+  {
+    title: 'Total Campaigns',
+    value: stats?.totalCampaigns || 0,
+    change: stats?.campaignGrowth || '0%',
+    icon: <MessagesSquare />,
+    color: 'blue'
+  },
+  {
+    title: 'Messages Sent',
+    value: (stats?.totalMessages || 0).toLocaleString(),
+    change: stats?.messageGrowth || '0%',
+    icon: <Zap />,
+    color: 'green'
+  },
+  {
+    title: 'Templates Created',
+    value: stats?.totalTemplates || 0,
+    change: stats?.templateGrowth || '0%',
+    icon: <FileText />,
+    color: 'purple'
+  },
+  {
+    title: 'Success Rate',
+    value: `${stats?.successRate || 0}%`,
+    change: stats?.successRateChange || '0%',
+    icon: <Activity />,
+    color: 'yellow'
+  },
+  {
+        title: 'Messages Delivered',
+        value: `${(stats?.deliveredMessages || 0).toLocaleString()} (${stats?.deliveryRate}%)`,
+        change: stats?.deliveryGrowth || '0%',
+        icon: <CheckCircle />,
+        color: 'success'
+    },
+    {
+        title: 'Failed Messages',
+        value: `${(stats?.failedMessages || 0).toLocaleString()} (${stats?.failureRate}%)`,
+        change: stats?.failureGrowth || '0%',
+        icon: <XCircle />,
+        color: 'error'
+    }
+];
+
 
   const deliveryData = {
     labels: ['Delivered', 'Read', 'Replied', 'Failed', 'Pending'],
-    datasets: [
-      {
-        label: 'Message Status',
-        data: [8750, 6500, 2100, 250, 1200],
-        backgroundColor: [
-          '#2DCE89',  // success
-          '#4DA0FF',  // primary
-          '#A78BFA',  // purple
-          '#FF4949',  // error
-          '#F5A623',  // warning
-        ],
-      },
-    ],
+    datasets: [{
+      label: 'Message Status',
+      data: [
+        messageStats.delivered,
+        messageStats.read,
+        messageStats.replied,
+        messageStats.failed,
+        messageStats.pending
+      ],
+      backgroundColor: [
+        '#2DCE89',
+        '#4DA0FF',
+        '#A78BFA',
+        '#FF4949',
+        '#F5A623',
+      ],
+    }],
   };
 
   const activityData = {
-    labels: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
+    labels: messageStats.timeline.map(item => item.date),
     datasets: [
       {
         label: 'Messages Sent',
-        data: [1200, 1900, 1500, 2500, 1800, 800, 500],
+        data: messageStats.timeline.map(item => item.sent),
         backgroundColor: '#4DA0FF',
       },
       {
         label: 'Messages Read',
-        data: [900, 1500, 1200, 1800, 1300, 500, 300],
+        data: messageStats.timeline.map(item => item.read),
         backgroundColor: '#2DCE89',
       },
     ],
@@ -116,7 +154,7 @@ function Dashboard() {
   return (
     <div className="dashboard">
       <section className="stats-grid">
-        {stats.map((stat, index) => (
+        {statsCards.map((stat, index) => (
           <StatCard key={index} {...stat} />
         ))}
       </section>
@@ -160,38 +198,22 @@ function Dashboard() {
         <div className="quick-stats card">
           <h3>Top Performing Templates</h3>
           <div className="template-stats">
-            <div className="template-stat">
-              <div className="template-info">
-                <span className="template-name">Welcome Message</span>
-                <span className="template-category">Utility</span>
+            {topTemplates.map((template, index) => (
+              <div key={index} className="template-stat">
+                <div className="template-info">
+                  <span className="template-name">{template.name}</span>
+                  <span className="template-category">{template.category}</span>
+                </div>
+                <div className="template-metric">
+                  <span className="metric-value">{template.deliveryRate}%</span>
+                  <span className="metric-label">Delivery</span>
+                </div>
               </div>
-              <div className="template-metric">
-                <span className="metric-value">98.7%</span>
-                <span className="metric-label">Delivery</span>
-              </div>
-            </div>
-            <div className="template-stat">
-              <div className="template-info">
-                <span className="template-name">Order Confirmation</span>
-                <span className="template-category">Transactional</span>
-              </div>
-              <div className="template-metric">
-                <span className="metric-value">97.2%</span>
-                <span className="metric-label">Delivery</span>
-              </div>
-            </div>
-            <div className="template-stat">
-              <div className="template-info">
-                <span className="template-name">Special Offer</span>
-                <span className="template-category">Marketing</span>
-              </div>
-              <div className="template-metric">
-                <span className="metric-value">95.5%</span>
-                <span className="metric-label">Delivery</span>
-              </div>
-            </div>
+            ))}
           </div>
         </div>
+
+     
 
         <div className="active-users card">
           <div className="card-header">
