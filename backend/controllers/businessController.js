@@ -4,52 +4,56 @@ const path = require('path');
 const fs = require('fs');
 class BusinessController {
     static async getBusinessDetails(req, res) {
-        try {
-            // For testing, let's hardcode a user ID
-            const userId = req.user.id;
+            try {
+                // For testing, let's hardcode a user ID
+                const userId = req.user.id;
 
-            const business = await Business.getByUserId(userId);
+                const business = await Business.getByUserId(userId);
 
-            if (!business) {
-                // If no business exists, create a default one
-                return res.status(200).json({
+                if (!business) {
+                    // If no business exists, create a default one
+                    return res.status(200).json({
+                        success: true,
+                        data: {
+                            name: 'Your Business',
+                            profile_image_url: null
+                        }
+                    });
+                }
+
+                res.status(200).json({
                     success: true,
-                    data: {
-                        name: 'Your Business',
-                        profile_image_url: null
-                    }
+                    data: business
+                });
+            } catch (error) {
+                console.error('Error in getBusinessDetails:', error);
+                res.status(500).json({
+                    success: false,
+                    message: 'Failed to get business details',
+                    error: error.message
                 });
             }
-
-            res.status(200).json({
-                success: true,
-                data: business
-            });
-        } catch (error) {
-            console.error('Error in getBusinessDetails:', error);
-            res.status(500).json({
-                success: false,
-                message: 'Failed to get business details',
-                error: error.message
-            });
         }
-    }
-
+        // businessController.js
     static async updateBusinessDetails(req, res) {
         try {
-            const { name, description, industry, size, contactEmail, contactPhone, website } = req.body;
             const userId = req.user.id;
+            const { user, business } = req.body; // Change to match frontend data structure
+
+            console.log('Updating business details:', { userId, user, business }); // Debug log
+
             const updatedBusiness = await Business.update(userId, {
-                name,
-                description,
-                industry,
-                size,
-                contactEmail,
-                contactPhone,
-                website
+                user,
+                business
             });
-            res.json({ success: true, data: updatedBusiness });
+
+            res.json({
+                success: true,
+                data: updatedBusiness,
+                message: 'Business details updated successfully'
+            });
         } catch (error) {
+            console.error('Error updating business details:', error);
             res.status(500).json({
                 success: false,
                 message: 'Failed to update business details',
@@ -57,6 +61,7 @@ class BusinessController {
             });
         }
     }
+
 
     static async uploadProfileImage(req, res) {
         try {

@@ -1,7 +1,8 @@
-import { useState, useRef, forwardRef, useImperativeHandle } from 'react';
+import { useState, useRef, forwardRef, useImperativeHandle, useEffect } from 'react';
 import { Camera, Video, ExternalLink, Phone, Copy, Plus, X } from 'lucide-react';
 import { CATEGORIES, LANGUAGES } from './templateConstants';
 import { templateService } from '../../api/templateService';
+import {businessService} from '../../api/businessService';
 import './TemplateForm.css';
 
 const TemplateForm = forwardRef(({ initialData, onSubmit, isSubmitting }, ref) => {
@@ -276,6 +277,30 @@ const handleFormSubmit = async () => {
       setIsUploading(false);
     }
   };
+
+    
+  const [businessDetails, setBusinessDetails] = useState({
+    name: 'Your Business',
+    profileImage: null
+  });
+
+  // Add useEffect to fetch business details
+  useEffect(() => {
+    const fetchBusinessDetails = async () => {
+      try {
+        const response = await businessService.getBusinessDetails();
+        setBusinessDetails({
+          name: response.data.business.name || 'Your Business',
+          profileImage: response.data.business.profile_image_url || null
+        });
+      } catch (error) {
+        console.error('Failed to fetch business details:', error);
+      }
+    };
+
+    fetchBusinessDetails();
+  }, []);
+
   const renderVariableSamples = () => {
     const variables = extractVariables(formData.bodyText);
     if (variables.length === 0) return null;
@@ -617,120 +642,145 @@ const handleFormSubmit = async () => {
     );
   };
 
-  const renderPreview = () => {
-    const renderBodyWithVariables = () => {
-      if (!formData.bodyText) return null;
-      
-      const parts = [];
-      let text = formData.bodyText;
-      let match;
-      const regex = /{{(\w+)}}/g;
-      let lastIndex = 0;
-      
-      while ((match = regex.exec(text)) !== null) {
-        if (match.index > lastIndex) {
-          parts.push(text.substring(lastIndex, match.index));
-        }
-        const varName = match[1];
-        const sample = formData.variableSamples[varName] || `Sample for ${varName}`;
-        parts.push(<span key={match.index} className="variable">{sample}</span>);
-        lastIndex = regex.lastIndex;
+ const renderPreview = () => {
+  const renderBodyWithVariables = () => {
+    if (!formData.bodyText) return null;
+    
+    const parts = [];
+    let text = formData.bodyText;
+    let match;
+    const regex = /{{(\w+)}}/g;
+    let lastIndex = 0;
+    
+    while ((match = regex.exec(text)) !== null) {
+      if (match.index > lastIndex) {
+        parts.push(text.substring(lastIndex, match.index));
       }
-      
-      if (lastIndex < text.length) {
-        parts.push(text.substring(lastIndex));
-      }
-      
-      return parts.length ? parts : text;
-    };
-
-    return (
-      <div className="template-preview card">
-        <h3>Preview</h3>
-        <div className="phone-container">
-          <div className="phone-header">
-            <div className="phone-notch"></div>
-          </div>
-          <div className="phone-content">
-            <div className="chat-header">
-              <div className="chat-profile">
-                <div className="chat-avatar">
-                  <img src="/whatsapp-logo.svg" alt="WhatsApp" className="chat-logo" />
-                </div>
-                <div className="chat-info">
-                  <span className="chat-name">Your Business</span>
-                  <span className="chat-status">Online</span>
-                </div>
-              </div>
-            </div>
-            
-            <div className="chat-messages">
-
-          {/* Header section - only show if header exists */}
-          {formData.headerType === 'text' && formData.headerText && (
-            <div className="message-header">{formData.headerText}</div>
-          )}
-          
-          {formData.headerType === 'image' && (
-            <div className="message-image">
-              {headerFilePreview ? (
-                <img src={headerFilePreview} alt="Header" className="header-preview" />
-              ) : (
-                <div className="image-placeholder">
-                  <Camera size={24} />
-                  <span>Image Preview</span>
-                </div>
-              )}
-            </div>
-          )}
-          
-          {formData.headerType === 'video' && (
-            <div className="message-video">
-              {headerFilePreview ? (
-                <video src={headerFilePreview} controls className="video-preview" />
-              ) : (
-                <div className="video-placeholder">
-                  <Video size={24} />
-                  <span>Video Preview</span>
-                </div>
-              )}
-            </div>
-          )}
-          
-          {/* Body section - always show if body exists */}
-          {formData.bodyText && (
-            <div className="message-container">
-              <div className="message-body">
-                {renderBodyWithVariables()}
-              </div>
-            </div>
-          )}
-          
-          {/* Footer section - only show if footer exists */}
-          {formData.footerText && (
-            <div className="message-footer">{formData.footerText}</div>
-          )}
-          
-          {/* Buttons section - only show if buttons exist */}
-          {formData.buttons.length > 0 && (
-            <div className="message-buttons">
-              {formData.buttons.map((button, index) => (
-                <div key={index} className="message-button">
-                  {button.type === 'url' && <ExternalLink size={12} />}
-                  {button.type === 'phone_number' && <Phone size={12} />}
-                  {button.type === 'quick_reply' && <Copy size={12} />}
-                  <span>{button.text || `Button ${index + 1}`}</span>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-            </div>
-          </div>
-        </div>
-
-    );
+      const varName = match[1];
+      const sample = formData.variableSamples[varName] || `Sample for ${varName}`;
+      parts.push(<span key={match.index} className="wa-template-variable">{sample}</span>);
+      lastIndex = regex.lastIndex;
+    }
+    
+    if (lastIndex < text.length) {
+      parts.push(text.substring(lastIndex));
+    }
+    
+    return parts.length ? parts : text;
   };
+
+  const currentTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+  return (
+    <div className="template-preview">
+      <h3>Template Preview</h3>
+      <div className="wa-phone-container">
+        <div className="wa-phone-header">
+          <div className="wa-phone-notch"></div>
+        </div>
+        <div className="wa-phone-content">
+          <div className="wa-chat-header">
+            <div className="wa-chat-profile">
+              <div className="wa-chat-avatar">
+                {businessDetails?.profileImage ? (
+                  <img 
+                    src={businessDetails.profileImage} 
+                    alt="Business Logo" 
+                    className="wa-business-dp"
+                    onError={(e) => {
+                      e.target.onerror = null; 
+                      e.target.src = '/default-business-icon.png';
+                    }}
+                  />
+                ) : (
+                  <div className="wa-business-dp-fallback">
+                    {businessDetails?.name?.charAt(0).toUpperCase() || 'B'}
+                  </div>
+                )}
+              </div>
+              <div className="wa-chat-info">
+                <div className="wa-chat-name">{businessDetails?.name || 'Your Business'}</div>
+                <div className="wa-chat-status">Online</div>
+              </div>
+            </div>
+          </div>
+          
+          <div className="wa-chat-messages">
+            <div className="wa-template-message">
+              <div className="wa-template-container">
+                {/* Header Media or Text */}
+                {formData.headerType === 'image' && (
+                  <div className="wa-template-media">
+                    {headerFilePreview ? (
+                      <img src={headerFilePreview} alt="Header" />
+                    ) : (
+                      <div className="wa-media-placeholder">
+                        <Camera size={24} color="#8696a0" />
+                        <span>Image</span>
+                      </div>
+                    )}
+                  </div>
+                )}
+                
+                {formData.headerType === 'video' && (
+                  <div className="wa-template-media">
+                    {headerFilePreview ? (
+                      <video src={headerFilePreview} controls />
+                    ) : (
+                      <div className="wa-media-placeholder">
+                        <Video size={24} color="#8696a0" />
+                        <span>Video</span>
+                      </div>
+                    )}
+                  </div>
+                )}
+                
+                {formData.headerType === 'text' && formData.headerText && (
+                  <div className="wa-template-header">{formData.headerText}</div>
+                )}
+                
+                {/* Message Body */}
+                {formData.bodyText && (
+                  <div className="wa-template-body">
+                    {renderBodyWithVariables()}
+                  </div>
+                )}
+                
+                {/* Footer */}
+                {formData.footerText && (
+                  <div className="wa-template-footer">{formData.footerText}</div>
+                )}
+                
+                {/* Buttons */}
+                {formData.buttons.length > 0 && (
+                  <div className="wa-template-buttons">
+                    {formData.buttons.map((button, index) => (
+                      <div key={index} className="wa-template-button">
+                        {button.type === 'url' && <ExternalLink size={16} />}
+                        {button.type === 'phone_number' && <Phone size={16} />}
+                        {button.type === 'quick_reply' && <Copy size={16} />}
+                        <span>{button.text || `Button ${index + 1}`}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                
+                {/* Message Time with Check marks */}
+                <div className="wa-template-time">
+                  {currentTime}
+                  <svg viewBox="0 0 16 15" width="14" height="14">
+                    <path d="M15.01 3.316l-.478-.372a.365.365 0 0 0-.51.063L8.666 9.879a.32.32 0 0 1-.484.033l-.358-.325a.319.319 0 0 0-.484.032l-.378.483a.418.418 0 0 0 .036.541l1.32 1.266c.143.14.361.125.484-.033l6.272-8.048a.366.366 0 0 0-.064-.512zm-4.1 0l-.478-.372a.365.365 0 0 0-.51.063L4.566 9.879a.32.32 0 0 1-.484.033L1.891 7.769a.366.366 0 0 0-.515.006l-.423.433a.364.364 0 0 0 .006.514l3.258 3.185c.143.14.361.125.484-.033l6.272-8.048a.365.365 0 0 0-.063-.51z" />
+                  </svg>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 
   return (
     <div className="template-form-container">

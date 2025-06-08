@@ -371,8 +371,8 @@ function CreateTemplate() {
       try {
         const response = await businessService.getBusinessDetails();
         setBusinessDetails({
-          name: response.data.name || 'Your Business',
-          profileImage: response.data.profile_image_url || null
+          name: response.data.business.name || 'Your Business',
+          profileImage: response.data.business.profile_image_url || null
         });
       } catch (error) {
         console.error('Failed to fetch business details:', error);
@@ -936,7 +936,6 @@ function CreateTemplate() {
                   >
                     <option value="marketing">Marketing</option>
                     <option value="utility">Utility</option>
-                    <option value="authentication">Authentication</option>
                   </select>
                 </div>
                 

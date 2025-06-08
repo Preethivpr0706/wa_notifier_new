@@ -102,22 +102,43 @@ class Template {
         let filterQuery = '';
 
         if (filters.status) {
-            filterQuery = ' AND status = ?';
+            filterQuery = ' AND t.status = ?';
             queryParams.push(filters.status);
         }
 
         if (filters.category) {
-            filterQuery += ' AND category = ?';
+            filterQuery += ' AND t.category = ?';
             queryParams.push(filters.category);
         }
 
         const [templates] = await pool.execute(
-            `SELECT * FROM templates WHERE user_id = ?${filterQuery} ORDER BY created_at DESC`,
+            `SELECT t.*, 
+         GROUP_CONCAT(
+             JSON_OBJECT(
+                 'id', tb.id,
+                 'type', tb.type,
+                 'text', tb.text,
+                 'value', tb.value,
+                 'button_order', tb.button_order
+             )
+         ) as buttons
+         FROM templates t
+         LEFT JOIN template_buttons tb ON t.id = tb.template_id
+         WHERE t.user_id = ?${filterQuery}
+         GROUP BY t.id
+         ORDER BY t.created_at DESC`,
             queryParams
         );
 
-        return templates;
+        // Parse the buttons string into JSON for each template
+        return templates.map(template => ({
+            ...template,
+            buttons: template.buttons ?
+                JSON.parse(`[${template.buttons}]`.replace(/\}\,\{/g, '},{')) :
+                []
+        }));
     }
+
 
     // Update a template
     static async update(templateId, templateData) {

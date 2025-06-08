@@ -608,37 +608,61 @@ static async updateTemplate(whatsappId, template, originalTemplate, userId) {
         }
 
         // Buttons component
-        if (template.buttons && template.buttons.length > 0) {
-            const buttonsComponent = {
-                type: "BUTTONS",
-                buttons: template.buttons.map(button => {
-                    const buttonConfig = { text: button.text };
+        // Fixed buttons component section
+            if (template.buttons && template.buttons.length > 0) {
+                const buttonsComponent = {
+                    type: "BUTTONS",
+                    buttons: template.buttons.map(button => {
+                            // Common button properties
+                            const buttonConfig = {
+                                text: button.text
+                            };
 
-                    switch (button.type) {
-                        case 'phone_number':
-                            return {
-                                ...buttonConfig,
-                                type: 'PHONE_NUMBER',
-                                phone_number: button.value
-                            };
-                        case 'url':
-                            return {
-                                ...buttonConfig,
-                                type: 'URL',
-                                url: button.value
-                            };
-                        case 'quick_reply':
-                            return {
-                                ...buttonConfig,
-                                type: 'QUICK_REPLY'
-                            };
-                        default:
-                            throw new Error(`Invalid button type: ${button.type}`);
-                    }
-                })
-            };
-            components.push(buttonsComponent);
-        }
+                            // Set type-specific properties
+                            switch (button.type) {
+                                case 'phone_number':
+                                    if (!button.text || !button.value) {
+                                        throw new Error('Phone button must have both display text and phone number');
+                                    }
+                                    return {
+                                        ...buttonConfig,
+                                        type: 'PHONE_NUMBER',
+                                        text: button.text,
+                                        phone_number: button.value
+                                    };
+
+                                case 'url':
+                                    if (!button.value) throw new Error('URL button must have a URL');
+                                    const urlButton = {
+                                        ...buttonConfig,
+                                        type: 'URL',
+                                        text: button.text,
+                                        url: button.value
+                                    };
+
+                                    // Add example if URL contains variables
+                                    // FIXED: Use array of strings, not nested arrays
+                                    if (button.value.includes('{{')) {
+                                        urlButton.example = ["ABC123XYZ"]; // Correct format
+                                    }
+
+                                    return urlButton;
+
+                                case 'quick_reply':
+                                    return {
+                                        ...buttonConfig,
+                                        type: 'QUICK_REPLY',
+                                        text: button.text,
+                                    };
+
+                                default:
+                                    throw new Error(`Invalid button type: ${button.type}`);
+                            }
+                        })
+                        // REMOVED: Component-level example that was causing the error
+                };
+                components.push(buttonsComponent);
+            }
 
         // Prepare payload - note that we're not including name and language for updates
         const payload = {

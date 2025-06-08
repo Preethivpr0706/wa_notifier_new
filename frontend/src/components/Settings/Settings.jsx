@@ -13,13 +13,42 @@ import {
   Edit,
   Key,
   ToggleLeft,
-  ToggleRight
+  ToggleRight,
+  AlertCircle,
+  CheckCircle,
+  Save
 } from 'lucide-react';
 import { businessService } from '../../api/businessService';
 import './Settings.css';
 
 function Settings() {
+  // State Management
   const [activeTab, setActiveTab] = useState('profile');
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
+  const [error, setError] = useState(null);
+  const [successMessage, setSuccessMessage] = useState('');
+  
+  // Form Data State
+  const [formData, setFormData] = useState({
+    user: {
+      firstName: '',
+      lastName: '',
+      email: '',
+      phone: ''
+    },
+    business: {
+      name: '',
+      description: '',
+      industry: '',
+      size: '',
+      contact_email: '',
+      contact_phone: '',
+      website: ''
+    }
+  });
+
+  // Notification Settings State
   const [notifications, setNotifications] = useState({
     campaignStart: true,
     campaignEnd: true,
@@ -28,532 +57,486 @@ function Settings() {
     messaging: false,
     marketing: true
   });
+
+  // Business Details State
   const [businessDetails, setBusinessDetails] = useState({
     name: 'Your Business',
     profileImage: null
   });
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
 
+  // Fetch Initial Data
   useEffect(() => {
-    const fetchBusinessDetails = async () => {
-      try {
-        setLoading(true);
-        const response = await businessService.getBusinessDetails();
-        
-        if (response.success) {
-          setBusinessDetails({
-            name: response.data.name || 'Your Business',
-            profileImage: response.data.profile_image_url || null
-          });
-        }
-      } catch (error) {
-        console.error('Failed to fetch business details:', error);
-        setError('Failed to load business details. Using default values.');
-      } finally {
-        setLoading(false);
-      }
-    };
-
     fetchBusinessDetails();
   }, []);
 
-  if (loading) {
-    return <div>Loading business details...</div>;
-  }
+  const fetchBusinessDetails = async () => {
+    try {
+      setIsLoading(true);
+      const response = await businessService.getBusinessDetails();
+      
+      if (response.success) {
+        const { user, business } = response.data;
+        
+        // Update form data
+        setFormData({
+          user: {
+            firstName: user.firstName || '',
+            lastName: user.lastName || '',
+            email: user.email || '',
+            phone: user.phone || ''
+          },
+          business: {
+            name: business.name || '',
+            description: business.description || '',
+            industry: business.industry || '',
+            size: business.size || '',
+            contact_email: business.contact_email || '',
+            contact_phone: business.contact_phone || '',
+            website: business.website || ''
+          }
+        });
 
-  if (error) {
-    return <div className="error-message">{error}</div>;
-  }
+        // Update business details
+        setBusinessDetails({
+          name: business.name || 'Your Business',
+          profileImage: business.profile_image_url
+        });
 
-  const handleProfileImageUpdate = (newImageUrl) => {
-    setBusinessDetails(prev => ({
-      ...prev,
-      profileImage: newImageUrl
-    }));
+        setError(null);
+      }
+    } catch (err) {
+      setError('Failed to load business details: ' + err.message);
+    } finally {
+      setIsLoading(false);
+    }
   };
+
+  // Event Handlers
   const handleTabChange = (tab) => {
     setActiveTab(tab);
-  };
-  
-  const toggleNotification = (key) => {
-    setNotifications({
-      ...notifications,
-      [key]: !notifications[key]
-    });
+    setError(null);
+    setSuccessMessage('');
   };
 
-  const renderContent = () => {
-    switch (activeTab) {
-      case 'profile':
-        return (
-          <div className="settings-content">
-            <h3>Profile Settings</h3>
-            <div className="user-profile-section">
+  const handleInputChange = (section, field, value) => {
+    setFormData(prev => ({
+      ...prev,
+      [section]: {
+        ...prev[section],
+        [field]: value
+      }
+    }));
+  };
+
+  const handleProfileImageUpdate = async (newImageUrl) => {
+    try {
+      setBusinessDetails(prev => ({
+        ...prev,
+        profileImage: newImageUrl
+      }));
+      
+      // You might want to save this to the backend here
+      await businessService.updateBusinessDetails({
+        business: {
+          ...formData.business,
+          profile_image_url: newImageUrl
+        }
+      });
+      
+      setSuccessMessage('Profile image updated successfully!');
+    } catch (err) {
+      setError('Failed to update profile image: ' + err.message);
+    }
+  };
+
+  const handleSaveChanges = async (section) => {
+    try {
+        setIsSaving(true);
+        setError(null);
+
+        // Log the data being sent
+        console.log('Saving changes for section:', section, formData[section]);
+
+        const response = await businessService.updateBusinessDetails({
+            [section]: formData[section]
+        });
+
+        if (response.success) {
+            setSuccessMessage(`${section === 'user' ? 'Profile' : 'Business'} details updated successfully!`);
+            
+            // Refresh the data after successful update
+            await fetchBusinessDetails();
+            
+            setTimeout(() => setSuccessMessage(''), 3000);
+        } else {
+            throw new Error(response.message || 'Update failed');
+        }
+    } catch (err) {
+        console.error('Save error:', err);
+        setError(`Failed to update ${section} details: ` + (err.message || 'Unknown error'));
+    } finally {
+        setIsSaving(false);
+    }
+};
+
+
+  const toggleNotification = (key) => {
+    setNotifications(prev => ({
+      ...prev,
+      [key]: !prev[key]
+    }));
+  };
+  // Render Content Functions
+  const renderProfileSection = () => (
+    <div className="settings-content">
+      <h3>Profile Settings</h3>
+      
+      <div className="user-profile-section">
         <ProfileImageUpload 
           profileImage={businessDetails.profileImage}
           onImageUpdate={handleProfileImageUpdate}
         />
         <div className="user-details">
-          <h4>{businessDetails.name}</h4>
-          <p>Business Profile</p>
+          <h4>{formData.user.firstName} {formData.user.lastName}</h4>
+          <p>{formData.user.email}</p>
         </div>
       </div>
-            
-            <div className="form-section">
-              <h4>Personal Information</h4>
-              <div className="form-row">
-                <div className="form-field">
-                  <label htmlFor="firstName">First Name</label>
-                  <input type="text" id="firstName" name="firstName" defaultValue="John" />
-                </div>
-                <div className="form-field">
-                  <label htmlFor="lastName">Last Name</label>
-                  <input type="text" id="lastName" name="lastName" defaultValue="Doe" />
-                </div>
-              </div>
-              <div className="form-field">
-                <label htmlFor="email">Email Address</label>
-                <input type="email" id="email" name="email" defaultValue="john.doe@example.com" />
-              </div>
-              <div className="form-field">
-                <label htmlFor="phone">Phone Number</label>
-                <input type="tel" id="phone" name="phone" defaultValue="+1 (555) 123-4567" />
-              </div>
-            </div>
-            
-            <div className="form-actions">
-              <button type="button" className="btn btn-primary">Save Changes</button>
-            </div>
+
+      <div className="form-section">
+        <h4>Personal Information</h4>
+        <div className="form-row">
+          <div className="form-field">
+            <label htmlFor="firstName">First Name</label>
+            <input
+              type="text"
+              id="firstName"
+              value={formData.user.firstName}
+              onChange={(e) => handleInputChange('user', 'firstName', e.target.value)}
+              placeholder="Enter first name"
+            />
           </div>
-        );
+          <div className="form-field">
+            <label htmlFor="lastName">Last Name</label>
+            <input
+              type="text"
+              id="lastName"
+              value={formData.user.lastName}
+              onChange={(e) => handleInputChange('user', 'lastName', e.target.value)}
+              placeholder="Enter last name"
+            />
+          </div>
+        </div>
+
+        <div className="form-field">
+          <label htmlFor="email">Email Address</label>
+          <input
+            type="email"
+            id="email"
+            value={formData.user.email}
+            onChange={(e) => handleInputChange('user', 'email', e.target.value)}
+            placeholder="Enter email address"
+          />
+        </div>
+
+        <div className="form-field">
+          <label htmlFor="phone">Phone Number</label>
+          <input
+            type="tel"
+            id="phone"
+            value={formData.user.phone}
+            onChange={(e) => handleInputChange('user', 'phone', e.target.value)}
+            placeholder="Enter phone number"
+          />
+        </div>
+
+        <div className="form-actions">
+          <button
+            type="button"
+            className="btn btn-primary"
+            onClick={() => handleSaveChanges('user')}
+            disabled={isSaving}
+          >
+            {isSaving ? (
+              <>
+                <span className="spinner"></span>
+                Saving...
+              </>
+            ) : (
+              <>
+                <Save size={16} />
+                Save Changes
+              </>
+            )}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+
+  const renderBusinessSection = () => (
+    <div className="settings-content">
+      <h3>Business Settings</h3>
       
+      <div className="form-section">
+        <h4>Business Information</h4>
+        <div className="form-field">
+          <label htmlFor="businessName">Business Name</label>
+          <input
+            type="text"
+            id="businessName"
+            value={formData.business.name}
+            onChange={(e) => handleInputChange('business', 'name', e.target.value)}
+            placeholder="Enter business name"
+          />
+        </div>
+
+        <div className="form-field">
+          <label htmlFor="businessDescription">Business Description</label>
+          <textarea
+            id="businessDescription"
+            value={formData.business.description}
+            onChange={(e) => handleInputChange('business', 'description', e.target.value)}
+            placeholder="Enter business description"
+            rows="3"
+          />
+        </div>
+
+        <div className="form-row">
+          <div className="form-field">
+            <label htmlFor="industry">Industry</label>
+            <select
+              id="industry"
+              value={formData.business.industry}
+              onChange={(e) => handleInputChange('business', 'industry', e.target.value)}
+            >
+              <option value="">Select Industry</option>
+              <option value="technology">Technology</option>
+              <option value="retail">Retail</option>
+              <option value="healthcare">Healthcare</option>
+              <option value="finance">Finance</option>
+              <option value="education">Education</option>
+              <option value="other">Other</option>
+            </select>
+          </div>
+
+          <div className="form-field">
+            <label htmlFor="businessSize">Company Size</label>
+            <select
+              id="businessSize"
+              value={formData.business.size}
+              onChange={(e) => handleInputChange('business', 'size', e.target.value)}
+            >
+              <option value="">Select Size</option>
+              <option value="1-10">1-10 employees</option>
+              <option value="11-50">11-50 employees</option>
+              <option value="51-200">51-200 employees</option>
+              <option value="201+">201+ employees</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <div className="form-section">
+        <h4>Contact Information</h4>
+        <div className="form-field">
+          <label htmlFor="businessEmail">Business Email</label>
+          <input
+            type="email"
+            id="businessEmail"
+            value={formData.business.contact_email}
+            onChange={(e) => handleInputChange('business', 'contact_email', e.target.value)}
+            placeholder="Enter business email"
+          />
+        </div>
+
+        <div className="form-field">
+          <label htmlFor="businessPhone">Business Phone</label>
+          <input
+            type="tel"
+            id="businessPhone"
+            value={formData.business.contact_phone}
+            onChange={(e) => handleInputChange('business', 'contact_phone', e.target.value)}
+            placeholder="Enter business phone"
+          />
+        </div>
+
+        <div className="form-field">
+          <label htmlFor="website">Website</label>
+          <input
+            type="url"
+            id="website"
+            value={formData.business.website}
+            onChange={(e) => handleInputChange('business', 'website', e.target.value)}
+            placeholder="Enter website URL"
+          />
+        </div>
+
+        <div className="form-actions">
+          <button
+            type="button"
+            className="btn btn-primary"
+            onClick={() => handleSaveChanges('business')}
+            disabled={isSaving}
+          >
+            {isSaving ? (
+              <>
+                <span className="spinner"></span>
+                Saving...
+              </>
+            ) : (
+              <>
+                <Save size={16} />
+                Save Changes
+              </>
+            )}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+
+  const renderSecuritySection = () => (
+    <div className="settings-content">
+      <h3>Security Settings</h3>
+      
+      <div className="form-section">
+        <h4>Change Password</h4>
+        <div className="form-field">
+          <label htmlFor="currentPassword">Current Password</label>
+          <input type="password" id="currentPassword" />
+        </div>
+        <div className="form-field">
+          <label htmlFor="newPassword">New Password</label>
+          <input type="password" id="newPassword" />
+        </div>
+        <div className="form-field">
+          <label htmlFor="confirmPassword">Confirm New Password</label>
+          <input type="password" id="confirmPassword" />
+        </div>
+        <button type="button" className="btn btn-primary">
+          <Key size={16} />
+          Update Password
+        </button>
+      </div>
+    </div>
+  );
+
+  const renderNotificationsSection = () => (
+    <div className="settings-content">
+      <h3>Notification Settings</h3>
+      
+      <div className="form-section">
+        <h4>Campaign Notifications</h4>
+        {renderNotificationOption(
+          'campaignStart',
+          'Campaign Started',
+          'Get notified when your campaign begins sending'
+        )}
+        {renderNotificationOption(
+          'campaignEnd',
+          'Campaign Completed',
+          'Get notified when your campaign finishes sending'
+        )}
+      </div>
+      
+      <div className="form-section">
+        <h4>Template Notifications</h4>
+        {renderNotificationOption(
+          'templateApproved',
+          'Template Approved',
+          'Get notified when your template is approved'
+        )}
+        {renderNotificationOption(
+          'templateRejected',
+          'Template Rejected',
+          'Get notified when your template is rejected'
+        )}
+      </div>
+      
+      <div className="form-section">
+        <h4>Communication Preferences</h4>
+        {renderNotificationOption(
+          'messaging',
+          'Messaging Updates',
+          'Get notified about new features and updates'
+        )}
+        {renderNotificationOption(
+          'marketing',
+          'Marketing Communications',
+          'Receive promotions, special offers, and newsletters'
+        )}
+      </div>
+    </div>
+  );
+
+  const renderNotificationOption = (key, title, description) => (
+    <div className="notification-option">
+      <div className="notification-info">
+        <span>{title}</span>
+        <p>{description}</p>
+      </div>
+      <button 
+        className="toggle-button" 
+        onClick={() => toggleNotification(key)}
+      >
+        {notifications[key] ? (
+          <ToggleRight size={32} className="toggle-on" />
+        ) : (
+          <ToggleLeft size={32} className="toggle-off" />
+        )}
+      </button>
+    </div>
+  );
+  // Main content renderer
+  const renderContent = () => {
+    switch (activeTab) {
+      case 'profile':
+        return renderProfileSection();
       case 'business':
-        return (
-          <div className="settings-content">
-            <h3>Business Settings</h3>
-            
-            <div className="form-section">
-              <h4>Business Information</h4>
-              <div className="form-field">
-                <label htmlFor="businessName">Business Name</label>
-                <input type="text" id="businessName" name="businessName" defaultValue="Acme Inc." />
-              </div>
-              <div className="form-field">
-                <label htmlFor="businessDescription">Business Description</label>
-                <textarea 
-                  id="businessDescription" 
-                  name="businessDescription" 
-                  defaultValue="Acme Inc. is a leading provider of innovative solutions for businesses of all sizes."
-                  rows="3"
-                ></textarea>
-              </div>
-              <div className="form-row">
-                <div className="form-field">
-                  <label htmlFor="industry">Industry</label>
-                  <select id="industry" name="industry" defaultValue="technology">
-                    <option value="technology">Technology</option>
-                    <option value="retail">Retail</option>
-                    <option value="healthcare">Healthcare</option>
-                    <option value="finance">Finance</option>
-                  </select>
-                </div>
-                <div className="form-field">
-                  <label htmlFor="businessSize">Company Size</label>
-                  <select id="businessSize" name="businessSize" defaultValue="medium">
-                    <option value="small">1-10 employees</option>
-                    <option value="medium">11-50 employees</option>
-                    <option value="large">51-200 employees</option>
-                    <option value="enterprise">201+ employees</option>
-                  </select>
-                </div>
-              </div>
-            </div>
-            
-            <div className="form-section">
-              <h4>Contact Information</h4>
-              <div className="form-field">
-                <label htmlFor="businessEmail">Business Email</label>
-                <input type="email" id="businessEmail" name="businessEmail" defaultValue="contact@acmeinc.com" />
-              </div>
-              <div className="form-field">
-                <label htmlFor="businessPhone">Business Phone</label>
-                <input type="tel" id="businessPhone" name="businessPhone" defaultValue="+1 (555) 987-6543" />
-              </div>
-              <div className="form-field">
-                <label htmlFor="website">Website</label>
-                <input type="url" id="website" name="website" defaultValue="https://acmeinc.com" />
-              </div>
-            </div>
-            
-            <div className="form-actions">
-              <button type="button" className="btn btn-primary">Save Changes</button>
-            </div>
-          </div>
-        );
-      
+        return renderBusinessSection();
       case 'security':
-        return (
-          <div className="settings-content">
-            <h3>Security Settings</h3>
-            
-            <div className="form-section">
-              <h4>Change Password</h4>
-              <div className="form-field">
-                <label htmlFor="currentPassword">Current Password</label>
-                <input type="password" id="currentPassword" name="currentPassword" />
-              </div>
-              <div className="form-field">
-                <label htmlFor="newPassword">New Password</label>
-                <input type="password" id="newPassword" name="newPassword" />
-              </div>
-              <div className="form-field">
-                <label htmlFor="confirmPassword">Confirm New Password</label>
-                <input type="password" id="confirmPassword" name="confirmPassword" />
-              </div>
-              <button type="button" className="btn btn-primary">Update Password</button>
-            </div>
-            
-            <div className="form-section">
-              <h4>Two-Factor Authentication</h4>
-              <div className="security-option">
-                <div className="security-info">
-                  <h5>SMS Authentication</h5>
-                  <p>Receive a code via SMS when you log in</p>
-                </div>
-                <button className="btn btn-secondary">
-                  <Key size={16} />
-                  <span>Enable</span>
-                </button>
-              </div>
-              <div className="security-option">
-                <div className="security-info">
-                  <h5>Authenticator App</h5>
-                  <p>Use Google Authenticator or similar app</p>
-                </div>
-                <button className="btn btn-secondary">
-                  <Key size={16} />
-                  <span>Enable</span>
-                </button>
-              </div>
-            </div>
-            
-            <div className="form-section">
-              <h4>Session Management</h4>
-              <p>You are currently logged in on 2 devices</p>
-              <button type="button" className="btn btn-danger">
-                Sign Out From All Devices
-              </button>
-            </div>
-          </div>
-        );
-      
+        return renderSecuritySection();
       case 'notifications':
-        return (
-          <div className="settings-content">
-            <h3>Notification Settings</h3>
-            
-            <div className="form-section">
-              <h4>Campaign Notifications</h4>
-              <div className="notification-option">
-                <div className="notification-info">
-                  <span>Campaign Started</span>
-                  <p>Get notified when your campaign begins sending</p>
-                </div>
-                <button 
-                  className="toggle-button" 
-                  onClick={() => toggleNotification('campaignStart')}
-                >
-                  {notifications.campaignStart ? (
-                    <ToggleRight size={32} className="toggle-on" />
-                  ) : (
-                    <ToggleLeft size={32} className="toggle-off" />
-                  )}
-                </button>
-              </div>
-              <div className="notification-option">
-                <div className="notification-info">
-                  <span>Campaign Completed</span>
-                  <p>Get notified when your campaign finishes sending</p>
-                </div>
-                <button 
-                  className="toggle-button" 
-                  onClick={() => toggleNotification('campaignEnd')}
-                >
-                  {notifications.campaignEnd ? (
-                    <ToggleRight size={32} className="toggle-on" />
-                  ) : (
-                    <ToggleLeft size={32} className="toggle-off" />
-                  )}
-                </button>
-              </div>
-            </div>
-            
-            <div className="form-section">
-              <h4>Template Notifications</h4>
-              <div className="notification-option">
-                <div className="notification-info">
-                  <span>Template Approved</span>
-                  <p>Get notified when your template is approved</p>
-                </div>
-                <button 
-                  className="toggle-button" 
-                  onClick={() => toggleNotification('templateApproved')}
-                >
-                  {notifications.templateApproved ? (
-                    <ToggleRight size={32} className="toggle-on" />
-                  ) : (
-                    <ToggleLeft size={32} className="toggle-off" />
-                  )}
-                </button>
-              </div>
-              <div className="notification-option">
-                <div className="notification-info">
-                  <span>Template Rejected</span>
-                  <p>Get notified when your template is rejected</p>
-                </div>
-                <button 
-                  className="toggle-button" 
-                  onClick={() => toggleNotification('templateRejected')}
-                >
-                  {notifications.templateRejected ? (
-                    <ToggleRight size={32} className="toggle-on" />
-                  ) : (
-                    <ToggleLeft size={32} className="toggle-off" />
-                  )}
-                </button>
-              </div>
-            </div>
-            
-            <div className="form-section">
-              <h4>Communication Preferences</h4>
-              <div className="notification-option">
-                <div className="notification-info">
-                  <span>Messaging Updates</span>
-                  <p>Get notified about new features and updates</p>
-                </div>
-                <button 
-                  className="toggle-button" 
-                  onClick={() => toggleNotification('messaging')}
-                >
-                  {notifications.messaging ? (
-                    <ToggleRight size={32} className="toggle-on" />
-                  ) : (
-                    <ToggleLeft size={32} className="toggle-off" />
-                  )}
-                </button>
-              </div>
-              <div className="notification-option">
-                <div className="notification-info">
-                  <span>Marketing Communications</span>
-                  <p>Receive promotions, special offers, and newsletters</p>
-                </div>
-                <button 
-                  className="toggle-button" 
-                  onClick={() => toggleNotification('marketing')}
-                >
-                  {notifications.marketing ? (
-                    <ToggleRight size={32} className="toggle-on" />
-                  ) : (
-                    <ToggleLeft size={32} className="toggle-off" />
-                  )}
-                </button>
-              </div>
-            </div>
-          </div>
-        );
-      
-      case 'billing':
-        return (
-          <div className="settings-content">
-            <h3>Billing & Subscription</h3>
-            
-            <div className="form-section">
-              <div className="subscription-card">
-                <div className="subscription-header">
-                  <h4>Current Plan</h4>
-                  <span className="plan-badge">Business</span>
-                </div>
-                <div className="subscription-details">
-                  <div className="plan-price">
-                    <span className="price">$49</span>
-                    <span className="period">/ month</span>
-                  </div>
-                  <ul className="plan-features">
-                    <li>10,000 messages per month</li>
-                    <li>Unlimited templates</li>
-                    <li>Advanced analytics</li>
-                    <li>Priority support</li>
-                  </ul>
-                  <div className="plan-info">
-                    <p>Renews on May 15, 2023</p>
-                    <p>3,587 messages used this month</p>
-                  </div>
-                </div>
-                <div className="subscription-actions">
-                  <button className="btn btn-primary">Upgrade Plan</button>
-                  <button className="btn btn-secondary">Manage Subscription</button>
-                </div>
-              </div>
-            </div>
-            
-            <div className="form-section">
-              <h4>Payment Methods</h4>
-              <div className="payment-method">
-                <div className="payment-info">
-                  <div className="card-icon">
-                    <CreditCard size={24} />
-                  </div>
-                  <div className="card-details">
-                    <span className="card-name">Visa ending in 4242</span>
-                    <span className="card-expiry">Expires 12/2025</span>
-                  </div>
-                </div>
-                <div className="payment-actions">
-                  <button className="action-btn">
-                    <Edit size={16} />
-                  </button>
-                </div>
-              </div>
-              <button className="btn btn-secondary add-payment-btn">
-                <CreditCard size={16} />
-                <span>Add Payment Method</span>
-              </button>
-            </div>
-            
-            <div className="form-section">
-              <h4>Billing History</h4>
-              <div className="billing-history">
-                <div className="invoice-item">
-                  <div className="invoice-info">
-                    <span className="invoice-date">Apr 15, 2023</span>
-                    <span className="invoice-plan">Business Plan - Monthly</span>
-                  </div>
-                  <div className="invoice-amount">$49.00</div>
-                </div>
-                <div className="invoice-item">
-                  <div className="invoice-info">
-                    <span className="invoice-date">Mar 15, 2023</span>
-                    <span className="invoice-plan">Business Plan - Monthly</span>
-                  </div>
-                  <div className="invoice-amount">$49.00</div>
-                </div>
-                <div className="invoice-item">
-                  <div className="invoice-info">
-                    <span className="invoice-date">Feb 15, 2023</span>
-                    <span className="invoice-plan">Business Plan - Monthly</span>
-                  </div>
-                  <div className="invoice-amount">$49.00</div>
-                </div>
-              </div>
-              <button className="btn btn-secondary">View All Invoices</button>
-            </div>
-          </div>
-        );
-      
-      case 'team':
-        return (
-          <div className="settings-content">
-            <h3>Team Management</h3>
-            
-            <div className="team-header">
-              <h4>Team Members</h4>
-              <button className="btn btn-primary">
-                <Users size={16} />
-                <span>Invite Team Member</span>
-              </button>
-            </div>
-            
-            <div className="team-list">
-              <div className="team-member">
-                <div className="member-info">
-                  <div className="member-avatar">
-                    <User size={20} />
-                  </div>
-                  <div className="member-details">
-                    <span className="member-name">John Doe (You)</span>
-                    <span className="member-email">john.doe@example.com</span>
-                  </div>
-                </div>
-                <div className="member-role admin">Admin</div>
-              </div>
-              
-              <div className="team-member">
-                <div className="member-info">
-                  <div className="member-avatar">
-                    <User size={20} />
-                  </div>
-                  <div className="member-details">
-                    <span className="member-name">Jane Smith</span>
-                    <span className="member-email">jane.smith@example.com</span>
-                  </div>
-                </div>
-                <div className="member-role editor">Editor</div>
-              </div>
-              
-              <div className="team-member">
-                <div className="member-info">
-                  <div className="member-avatar">
-                    <User size={20} />
-                  </div>
-                  <div className="member-details">
-                    <span className="member-name">Mike Johnson</span>
-                    <span className="member-email">mike.johnson@example.com</span>
-                  </div>
-                </div>
-                <div className="member-role viewer">Viewer</div>
-              </div>
-              
-              <div className="team-member pending">
-                <div className="member-info">
-                  <div className="member-avatar">
-                    <User size={20} />
-                  </div>
-                  <div className="member-details">
-                    <span className="member-name">Sarah Wilson</span>
-                    <span className="member-email">sarah.wilson@example.com</span>
-                  </div>
-                </div>
-                <div className="member-role pending">Pending</div>
-              </div>
-            </div>
-            
-            <div className="form-section">
-              <h4>Roles & Permissions</h4>
-              <div className="role-item">
-                <div className="role-info">
-                  <span className="role-name">Admin</span>
-                  <p className="role-description">Can manage all aspects of the account including billing, team members, and all content.</p>
-                </div>
-              </div>
-              <div className="role-item">
-                <div className="role-info">
-                  <span className="role-name">Editor</span>
-                  <p className="role-description">Can create and edit templates, campaigns, and view analytics, but cannot manage team or billing.</p>
-                </div>
-              </div>
-              <div className="role-item">
-                <div className="role-info">
-                  <span className="role-name">Viewer</span>
-                  <p className="role-description">Can view templates, campaigns, and analytics, but cannot create or edit content.</p>
-                </div>
-              </div>
-            </div>
-          </div>
-        );
-      
+        return renderNotificationsSection();
       default:
         return null;
     }
   };
 
+  // Loading State
+  if (isLoading) {
+    return (
+      <div className="settings-loading">
+        <div className="spinner"></div>
+        <p>Loading settings...</p>
+      </div>
+    );
+  }
+
+  // Main Render
   return (
     <div className="settings">
       <div className="page-header">
         <h2>Settings</h2>
       </div>
       
+      {/* Messages */}
+      {error && (
+        <div className="message message--error">
+          <AlertCircle size={16} />
+          <span>{error}</span>
+        </div>
+      )}
+      
+      {successMessage && (
+        <div className="message message--success">
+          <CheckCircle size={16} />
+          <span>{successMessage}</span>
+        </div>
+      )}
+      
       <div className="settings-container">
+        {/* Sidebar Navigation */}
         <div className="settings-sidebar card">
           <ul className="settings-menu">
             <li className={`settings-menu-item ${activeTab === 'profile' ? 'active' : ''}`}>
@@ -563,6 +546,7 @@ function Settings() {
                 <ChevronRight size={16} className="menu-chevron" />
               </button>
             </li>
+            
             <li className={`settings-menu-item ${activeTab === 'business' ? 'active' : ''}`}>
               <button onClick={() => handleTabChange('business')}>
                 <span className="menu-icon"><Building size={18} /></span>
@@ -570,6 +554,7 @@ function Settings() {
                 <ChevronRight size={16} className="menu-chevron" />
               </button>
             </li>
+            
             <li className={`settings-menu-item ${activeTab === 'security' ? 'active' : ''}`}>
               <button onClick={() => handleTabChange('security')}>
                 <span className="menu-icon"><Lock size={18} /></span>
@@ -577,6 +562,7 @@ function Settings() {
                 <ChevronRight size={16} className="menu-chevron" />
               </button>
             </li>
+            
             <li className={`settings-menu-item ${activeTab === 'notifications' ? 'active' : ''}`}>
               <button onClick={() => handleTabChange('notifications')}>
                 <span className="menu-icon"><Bell size={18} /></span>
@@ -584,24 +570,17 @@ function Settings() {
                 <ChevronRight size={16} className="menu-chevron" />
               </button>
             </li>
-            <li className={`settings-menu-item ${activeTab === 'billing' ? 'active' : ''}`}>
-              <button onClick={() => handleTabChange('billing')}>
-                <span className="menu-icon"><CreditCard size={18} /></span>
-                <span>Billing & Subscription</span>
-                <ChevronRight size={16} className="menu-chevron" />
-              </button>
-            </li>
-            <li className={`settings-menu-item ${activeTab === 'team' ? 'active' : ''}`}>
-              <button onClick={() => handleTabChange('team')}>
-                <span className="menu-icon"><Users size={18} /></span>
-                <span>Team Management</span>
-                <ChevronRight size={16} className="menu-chevron" />
-              </button>
-            </li>
           </ul>
         </div>
         
+        {/* Main Content Area */}
         <div className="settings-main card">
+          {isSaving && (
+            <div className="saving-overlay">
+              <div className="spinner"></div>
+              <span>Saving changes...</span>
+            </div>
+          )}
           {renderContent()}
         </div>
       </div>

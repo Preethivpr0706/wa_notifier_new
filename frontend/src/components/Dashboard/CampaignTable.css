@@ -1,74 +1,249 @@
+/* CampaignTable.css - Enhanced Responsive Version */
+
 .campaign-table-container {
-  width: 100%;
-  overflow-x: auto;
+    width: 100%;
+    overflow-x: auto;
+    border-radius: var(--border-radius-lg, 12px);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    background: var(--white, #ffffff);
 }
 
 .campaign-table {
-  width: 100%;
-  border-collapse: collapse;
+    width: 100%;
+    border-collapse: collapse;
+    min-width: 600px;
+    /* Minimum width to prevent excessive compression */
 }
 
 .campaign-table th {
-  text-align: left;
-  padding: 12px 16px;
-  color: var(--neutral-600);
-  font-weight: 500;
-  font-size: 14px;
-  border-bottom: 1px solid var(--neutral-300);
+    text-align: left;
+    padding: 16px;
+    color: var(--neutral-600, #6B7280);
+    font-weight: 600;
+    font-size: 14px;
+    border-bottom: 2px solid var(--neutral-200, #E5E7EB);
+    background-color: var(--neutral-50, #F9FAFB);
+    white-space: nowrap;
 }
 
 .campaign-table td {
-  padding: 16px;
-  border-bottom: 1px solid var(--neutral-300);
-  font-size: 14px;
+    padding: 16px;
+    border-bottom: 1px solid var(--neutral-200, #E5E7EB);
+    font-size: 14px;
+    color: var(--neutral-800, #1F2937);
+    vertical-align: middle;
 }
 
 .campaign-table tr:last-child td {
-  border-bottom: none;
+    border-bottom: none;
+}
+
+.campaign-table tr:hover {
+    background-color: var(--neutral-50, #F9FAFB);
 }
 
 .status-badge {
-  display: inline-flex;
-  align-items: center;
-  padding: 4px 12px;
-  border-radius: 16px;
-  font-size: 12px;
-  font-weight: 500;
+    display: inline-flex;
+    align-items: center;
+    padding: 6px 12px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    white-space: nowrap;
 }
 
 .status-sent {
-  background-color: rgba(45, 206, 137, 0.1);
-  color: var(--success-color);
+    background-color: rgba(45, 206, 137, 0.15);
+    color: var(--success-color, #2DCE89);
+    border: 1px solid rgba(45, 206, 137, 0.3);
 }
 
 .status-scheduled {
-  background-color: rgba(77, 160, 255, 0.1);
-  color: var(--primary-color);
+    background-color: rgba(77, 160, 255, 0.15);
+    color: var(--primary-color, #4DA0FF);
+    border: 1px solid rgba(77, 160, 255, 0.3);
 }
 
 .status-failed {
-  background-color: rgba(255, 73, 73, 0.1);
-  color: var(--error-color);
+    background-color: rgba(255, 73, 73, 0.15);
+    color: var(--error-color, #FF4949);
+    border: 1px solid rgba(255, 73, 73, 0.3);
 }
 
 .table-actions {
-  display: flex;
-  gap: 8px;
+    display: flex;
+    gap: 8px;
+    justify-content: flex-end;
 }
 
 .action-btn {
-  width: 32px;
-  height: 32px;
-  border-radius: var(--border-radius-md);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--neutral-700);
-  background-color: transparent;
-  transition: all var(--transition-speed);
+    width: 36px;
+    height: 36px;
+    border-radius: var(--border-radius-md, 8px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--neutral-600, #6B7280);
+    background-color: transparent;
+    border: 1px solid var(--neutral-300, #D1D5DB);
+    transition: all 0.2s ease;
+    cursor: pointer;
 }
 
 .action-btn:hover {
-  background-color: var(--neutral-200);
-  color: var(--primary-color);
+    background-color: var(--primary-color, #4DA0FF);
+    color: var(--white, #ffffff);
+    border-color: var(--primary-color, #4DA0FF);
+    transform: translateY(-1px);
+}
+
+
+/* Tablet Responsiveness */
+
+@media (max-width: 1024px) {
+    .campaign-table {
+        min-width: 550px;
+    }
+    .campaign-table th,
+    .campaign-table td {
+        padding: 12px;
+        font-size: 13px;
+    }
+    .campaign-table th {
+        font-size: 12px;
+    }
+    .status-badge {
+        padding: 4px 10px;
+        font-size: 11px;
+    }
+    .action-btn {
+        width: 32px;
+        height: 32px;
+    }
+}
+
+
+/* Mobile Responsiveness */
+
+@media (max-width: 768px) {
+    .campaign-table-container {
+        margin: 0 -16px;
+        /* Extend to screen edges on mobile */
+        border-radius: 0;
+    }
+    .campaign-table {
+        min-width: 500px;
+    }
+    .campaign-table th,
+    .campaign-table td {
+        padding: 10px 8px;
+        font-size: 12px;
+    }
+    .campaign-table th {
+        font-size: 11px;
+        padding: 12px 8px;
+    }
+    .status-badge {
+        padding: 3px 8px;
+        font-size: 10px;
+        letter-spacing: 0.25px;
+    }
+    .action-btn {
+        width: 28px;
+        height: 28px;
+    }
+    /* Hide less critical columns on mobile */
+    .campaign-table th:nth-child(3),
+    .campaign-table td:nth-child(3) {
+        display: none;
+    }
+}
+
+
+/* Small Mobile Devices */
+
+@media (max-width: 480px) {
+    .campaign-table {
+        min-width: 400px;
+    }
+    .campaign-table th,
+    .campaign-table td {
+        padding: 8px 6px;
+        font-size: 11px;
+    }
+    .campaign-table th {
+        font-size: 10px;
+        padding: 10px 6px;
+    }
+    .status-badge {
+        padding: 2px 6px;
+        font-size: 9px;
+    }
+    .action-btn {
+        width: 24px;
+        height: 24px;
+    }
+    /* Hide template column on small mobile */
+    .campaign-table th:nth-child(2),
+    .campaign-table td:nth-child(2) {
+        display: none;
+    }
+}
+
+
+/* Ultra-small screens - Card Layout */
+
+@media (max-width: 360px) {
+    .campaign-table-container {
+        overflow-x: visible;
+    }
+    .campaign-table,
+    .campaign-table thead,
+    .campaign-table tbody,
+    .campaign-table th,
+    .campaign-table td,
+    .campaign-table tr {
+        display: block;
+    }
+    .campaign-table thead tr {
+        position: absolute;
+        top: -9999px;
+        left: -9999px;
+    }
+    .campaign-table tr {
+        border: 1px solid var(--neutral-200, #E5E7EB);
+        border-radius: var(--border-radius-md, 8px);
+        margin-bottom: 12px;
+        padding: 12px;
+        background: var(--white, #ffffff);
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    }
+    .campaign-table td {
+        border: none;
+        border-bottom: 1px solid var(--neutral-200, #E5E7EB);
+        position: relative;
+        padding: 8px 0 8px 40%;
+        font-size: 12px;
+    }
+    .campaign-table td:last-child {
+        border-bottom: none;
+        padding-top: 12px;
+    }
+    .campaign-table td:before {
+        content: attr(data-label) ": ";
+        position: absolute;
+        left: 0;
+        width: 35%;
+        padding-right: 10px;
+        white-space: nowrap;
+        font-weight: 600;
+        color: var(--neutral-600, #6B7280);
+        font-size: 11px;
+    }
+    .table-actions {
+        justify-content: flex-start;
+        padding-left: 0;
+    }
 }

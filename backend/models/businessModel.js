@@ -3,30 +3,6 @@ const path = require('path');
 const { pool } = require('../config/database');
 
 class Business {
-    static async getByUserId(userId) {
-        try {
-            // First get the business_id from users table
-            const [userRows] = await pool.execute(
-                'SELECT business_id FROM users WHERE id = ?', [userId]
-            );
-
-            if (!userRows.length || !userRows[0].business_id) {
-                return null;
-            }
-
-            const businessId = userRows[0].business_id;
-
-            // Then get the business details
-            const [businessRows] = await pool.execute(
-                'SELECT * FROM businesses WHERE id = ?', [businessId]
-            );
-
-            return businessRows[0] || null;
-        } catch (error) {
-            console.error('Error in getByUserId:', error);
-            throw error;
-        }
-    }
 
     static async updateProfileImage(userId, imageUrl) {
         const connection = await pool.getConnection();
@@ -70,30 +46,90 @@ class Business {
             connection.release();
         }
     }
-
-    static async update(userId, updateData) {
-        const connection = await pool.getConnection();
+    static async getByUserId(userId) {
         try {
-            await connection.beginTransaction();
+            // First get the business_id and user details from users table
+            const [userRows] = await pool.execute(
+                `SELECT u.*, b.* 
+                 FROM users u 
+                 LEFT JOIN businesses b ON u.business_id = b.id 
+                 WHERE u.id = ?`, [userId]
+            );
 
-            // First get the business_id
-            const business = await this.getByUserId(userId);
-            if (!business) {
-                throw new Error('Business not found for this user');
+            if (!userRows.length) {
+                return null;
             }
 
-            const {
-                name,
-                description,
-                industry,
-                size,
-                contactEmail,
-                contactPhone,
-                website
-            } = updateData;
+            // Format the response
+            const user = userRows[0];
+            return {
+                user: {
+                    id: user.id,
+                    email: user.email,
+                    name: user.name,
+                    firstName: user.name.split(' ')[0] || '',
+                    lastName: user.name.split(' ')[1] || '',
+                },
+                business: {
+                    id: user.business_id,
+                    name: user.name,
+                    description: user.description,
+                    profile_image_url: user.profile_image_url,
+                    industry: user.industry,
+                    size: user.size,
+                    contact_email: user.contact_email,
+                    contact_phone: user.contact_phone,
+                    website: user.website,
+                }
+            };
+        } catch (error) {
+            console.error('Error in getByUserId:', error);
+            throw error;
+        }
+    }
 
-            await connection.execute(
-                `UPDATE businesses 
+    // businessModel.js
+    static async update(userId, updateData) {
+            const connection = await pool.getConnection();
+            try {
+                await connection.beginTransaction();
+                console.log('Updating with data:', updateData); // Debug log
+
+                const { user: userUpdate, business: businessUpdate } = updateData;
+
+                // Update user details
+                if (userUpdate) {
+                    const fullName = `${userUpdate.firstName} ${userUpdate.lastName}`.trim();
+                    console.log('Updating user:', { userId, fullName, email: userUpdate.email }); // Debug log
+
+                    await connection.execute(
+                        `UPDATE users 
+                 SET name = ?, 
+                     email = ?,
+                     phone=?,
+                     updated_at = CURRENT_TIMESTAMP
+                 WHERE id = ?`, [fullName, userUpdate.email, userUpdate.phone, userId]
+                    );
+                }
+
+                // Update business details
+                if (businessUpdate) {
+                    // First get the business_id
+                    const [userRow] = await connection.execute(
+                        'SELECT business_id FROM users WHERE id = ?', [userId]
+                    );
+                    if (!userRow[0] || !userRow[0].business_id) {
+                        throw new Error('No business associated with this user');
+                    }
+
+
+                    console.log('Updating business:', {
+                        businessId: userRow[0].business_id,
+                        data: businessUpdate
+                    }); // Debug log
+
+                    await connection.execute(
+                        `UPDATE businesses 
                  SET name = ?, 
                      description = ?,
                      industry = ?,
@@ -103,26 +139,45 @@ class Business {
                      website = ?,
                      updated_at = CURRENT_TIMESTAMP
                  WHERE id = ?`, [
-                    name,
-                    description,
-                    industry,
-                    size,
-                    contactEmail,
-                    contactPhone,
-                    website,
-                    business.id
-                ]
-            );
+                            businessUpdate.name,
+                            businessUpdate.description,
+                            businessUpdate.industry,
+                            businessUpdate.size,
+                            businessUpdate.contact_email,
+                            businessUpdate.contact_phone,
+                            businessUpdate.website,
+                            userRow[0].business_id
+                        ]
+                    );
+                }
 
-            await connection.commit();
-            return this.getByUserId(userId);
-        } catch (error) {
-            await connection.rollback();
-            throw error;
-        } finally {
-            connection.release();
+                await connection.commit();
+
+                // Fetch and return updated data
+                return await this.getByUserId(userId);
+            } catch (error) {
+                await connection.rollback();
+                console.error('Error in update:', error); // Debug log
+                throw error;
+            } finally {
+                connection.release();
+            }
         }
+        // businessModel.js
+    static validateUpdateData(data) {
+        const { user, business } = data;
+
+        if (user && (!user.firstName || !user.email)) {
+            throw new Error('First name and email are required for user update');
+        }
+
+        if (business && !business.name) {
+            throw new Error('Business name is required for business update');
+        }
+
+        return true;
     }
+
 }
 
 

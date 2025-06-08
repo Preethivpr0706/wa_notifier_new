@@ -37,10 +37,19 @@ export const businessService = {
         }
       },
 
-    updateBusinessDetails: async(data) => {
+    // businessService.js
+updateBusinessDetails: async(data) => {
+    try {
+        console.log('Sending update request with data:', data); // Debug log
         const response = await apiClient.put('/business', data);
+        console.log('Update response:', response.data); // Debug log
         return response.data;
-    },
+    } catch (error) {
+        console.error('Update failed:', error);
+        throw error;
+    }
+},
+
 
     uploadProfileImage: async(formData) => {
         const response = await apiClient.post(

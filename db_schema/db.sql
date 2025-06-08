@@ -224,3 +224,6 @@ INSERT INTO `whatsapp_templates`.`users` (`id`, `email`, `name`) VALUES ('2', 'h
 INSERT INTO `whatsapp_templates`.`business_settings` (`id`, `business_id`, `whatsapp_api_token`, `whatsapp_business_account_id`, `whatsapp_phone_number_id`, `facebook_app_id`, `webhook_verify_token`) VALUES ('2', '2', 'EAAToTF1vXmABO4DEhCC75c5rngPvZCAETSBtoZCq47tmIHloZBE9NMiqZA5xrKQzdfGP4FAjezOHikVukzP1yVUjsoHyg19v1yHItOBxlm9s4fxzX3tHeLgfLMssTYR8ynMRpf4MV31rM6ZAlVAMj8ZAxnjy3UD0oUhpcJhf9gujsDhzd4pdveUtpuYLTMDoSx138jm8g6aLvQBCclzZBqFanWIw9ZBusxl0BaVgBeq4', '748633347827575', '660116777187027', '1381314589580896', 'secret_token');
 UPDATE `whatsapp_templates`.`users` SET `business_id` = '2', `password` = 'Harish6292@' WHERE (`id` = '2');
 
+
+ALTER TABLE users
+ADD COLUMN phone VARCHAR(20);

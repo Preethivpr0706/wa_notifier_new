@@ -1,5 +1,6 @@
 import { Eye } from 'lucide-react';
 import './CampaignTable.css';
+import { useNavigate } from 'react-router-dom';
 
 function CampaignTable({ campaigns }) {
   const getStatusClass = (status) => {
@@ -14,6 +15,8 @@ function CampaignTable({ campaigns }) {
         return '';
     }
   };
+
+  const navigate = useNavigate();
 
   return (
     <div className="campaign-table-container">
@@ -31,18 +34,22 @@ function CampaignTable({ campaigns }) {
         <tbody>
           {campaigns.map((campaign) => (
             <tr key={campaign.id}>
-              <td>{campaign.name}</td>
-              <td>{campaign.template}</td>
-              <td>{campaign.recipients.toLocaleString()}</td>
-              <td>
+              <td data-label="Campaign Name">{campaign.name}</td>
+              <td data-label="Template">{campaign.template}</td>
+              <td data-label="Recipients">{campaign.recipients.toLocaleString()}</td>
+              <td data-label="Status">
                 <span className={`status-badge ${getStatusClass(campaign.status)}`}>
                   {campaign.status}
                 </span>
               </td>
-              <td>{campaign.date}</td>
-              <td>
+              <td data-label="Date">{campaign.date}</td>
+              <td data-label="Actions">
                 <div className="table-actions">
-                  <button className="action-btn" title="View Details">
+                  <button 
+                    className="action-btn" 
+                    title="View Details" 
+                    onClick={() => navigate(`/campaigns/${campaign.id}`)}
+                  >
                     <Eye size={16} />
                   </button>
                 </div>

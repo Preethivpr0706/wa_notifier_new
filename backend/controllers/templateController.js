@@ -228,6 +228,8 @@ class TemplateController {
         try {
             const userId = req.user.id;
             const templateId = req.params.id;
+            const isProduction = process.env.NODE_ENV === 'production';
+
 
             // Ensure we have all required fields
             const templateData = {
@@ -243,7 +245,21 @@ class TemplateController {
                     if (button.type === 'url') {
                         button.value = await UrlTrackingService.getOrCreateTrackingUrl(
                             templateId,
-                            button.value
+                            button.value,
+                            isProduction
+                        );
+                    }
+                }
+            }
+            // Update tracking URLs with the actual template ID
+            if (templateData.buttons) {
+                for (const button of templateData.buttons) {
+                    if (button.type === 'url' && button.value.includes('/redirect/')) {
+                        const trackingId = button.value.split('/redirect/')[1].split('?')[0];
+                        await pool.execute(
+                            `UPDATE tracked_urls 
+                         SET template_id = ? 
+                         WHERE id = ?`, [templateId, trackingId]
                         );
                     }
                 }

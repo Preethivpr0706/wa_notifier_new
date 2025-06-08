@@ -462,3 +462,93 @@ Under contact folder->ContactList.css
         background-color: #f2f2f2;
     }
 }
+
+
+/* Empty States */
+
+.empty-contacts {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    height: 16rem;
+    /* Same as .no-list-selected */
+    padding: 1.5rem;
+    /* Same as .no-list-selected */
+}
+
+.empty-contacts-icon {
+    color: #d1d5db;
+    /* Same as .no-list-icon */
+    margin-bottom: 1rem;
+}
+
+.empty-contacts-title {
+    font-size: 1.25rem;
+    /* Same as .no-list-title */
+    font-weight: 500;
+    /* Same as .no-list-title */
+    color: #111827;
+    /* Same as .no-list-title */
+    margin-bottom: 0.25rem;
+    /* Same as .no-list-title */
+}
+
+.empty-contacts-message {
+    color: #6b7280;
+    /* Same as .no-list-subtitle */
+    margin-bottom: 1.5rem;
+}
+
+.empty-contacts .btn-primary {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.75rem 1.5rem;
+    background-color: #3182ce;
+    color: white;
+    border: none;
+    border-radius: 0.375rem;
+    font-size: 0.875rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background-color 0.2s;
+    box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+}
+
+.empty-contacts .btn-primary:hover {
+    background-color: #2c5aa0;
+}
+
+.no-list-selected {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    height: 16rem;
+    padding: 1.5rem;
+}
+
+.no-list-icon {
+    color: #d1d5db;
+    margin-bottom: 1rem;
+}
+
+.contact-icon {
+    height: 3rem;
+    width: 3rem;
+    margin: 0 auto;
+}
+
+.no-list-title {
+    font-size: 1.25rem;
+    font-weight: 500;
+    color: #111827;
+    margin-bottom: 0.25rem;
+}
+
+.no-list-subtitle {
+    color: #6b7280;
+}

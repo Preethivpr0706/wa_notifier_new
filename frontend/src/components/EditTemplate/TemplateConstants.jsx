@@ -1,7 +1,6 @@
 export const CATEGORIES = [
     { value: 'marketing', label: 'Marketing' },
     { value: 'utility', label: 'Utility' },
-    { value: 'authentication', label: 'Authentication' }
   ];
   
   export const LANGUAGES = [

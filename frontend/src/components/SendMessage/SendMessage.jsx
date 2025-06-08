@@ -8,6 +8,7 @@ import { messageService } from '../../api/messageService';
 import MediaUploadModal from './MediaUploadModal';
 import './SendMessage.css';
 import Papa from 'papaparse';
+import {TemplateSelectionModal} from './TemplateSelectionModal';
 
 function SendMessage() {
   const navigate = useNavigate();
@@ -43,9 +44,12 @@ function SendMessage() {
     scheduledTime: '',
     scheduledDate: '',
     sendNow: true,
-    fieldMappings: {}
+    fieldMappings: {},
+     campaignName: '' 
   });
   const fileInputRef = useRef(null);
+    const [showTemplateSelection, setShowTemplateSelection] = useState(false);
+
   
   // Fetch templates and contacts
   useEffect(() => {
@@ -129,16 +133,21 @@ function SendMessage() {
   };
 
   // Step 4 validation: Scheduling
-  const validateStep4 = () => {
-    let isValid = true;
-    
-    if (!formData.sendNow) {
-      isValid = !!formData.scheduledDate && !!formData.scheduledTime;
-    }
-    
-    setStepValidation(prev => ({ ...prev, step4Valid: isValid }));
-    return isValid;
-  };
+  // Update Step 4 validation
+const validateStep4 = () => {
+  let isValid = !!formData.campaignName; // Require campaign name
+  
+  if (!formData.sendNow) {
+    isValid = isValid && !!formData.scheduledDate && !!formData.scheduledTime;
+  }
+  
+  setStepValidation(prev => ({ ...prev, step4Valid: isValid }));
+  return isValid;
+};
+
+const handleClosePreview = () => {
+  setSelectedPreviewTemplate(null);
+};
 
   // Handler for proceeding to next step
   const goToNextStep = (currentStep) => {
@@ -301,6 +310,7 @@ function SendMessage() {
       // Ensure audienceType is lowercase to match backend expectations
       const payload = {
         templateId: formData.templateId,
+         campaignName: formData.campaignName,
         audience_type: formData.audienceType.toLowerCase(), // Convert to lowercase
         contacts: targetContacts.map(c => ({
           id: c.id,
@@ -347,6 +357,7 @@ function SendMessage() {
       
       const payload = {
         templateId: formData.templateId,
+         campaignName: formData.campaignName,
         audience_type: formData.audienceType.toLowerCase(),
         contacts: targetContacts.map(c => ({
           id: c.id,
@@ -405,104 +416,66 @@ function SendMessage() {
       
       <form onSubmit={handleSubmit}>
         {/* Step 1: Template Selection */}
-        {step === 1 && (
-          <div className="form-step card">
-            <h3 className="section-title">
-              <FileText size={18} />
-              <span>Select Template</span>
-            </h3>
-            
-            {showValidationError && !stepValidation.step1Valid && (
-              <div className="validation-error">
-                <AlertTriangle size={16} />
-                <span>Please select a template before proceeding.</span>
-              </div>
-            )}
-            
-            <div className="form-field">
-              <label htmlFor="templateId">Message Template</label>
-              <select
-                id="templateId"
-                name="templateId"
-                value={formData.templateId}
-                onChange={handleInputChange}
-                required
-                className={showValidationError && !formData.templateId ? 'error' : ''}
-              >
-                <option value="">Select a template</option>
-                {templates.map(template => (
-                  <option key={template.id} value={template.id}>
-                    {template.name} ({template.category})
-                  </option>
-                ))}
-              </select>
-            </div>
-            
-            {selectedTemplate && (
-              <div className="template-preview">
-                <h4>Template Preview</h4>
-                <div className="template-content">
-                  {selectedTemplate.header_type && selectedTemplate.header_content && (
-                    <div className={`template-header ${selectedTemplate.header_type}`}>
-                      {selectedTemplate.header_type === 'text' ? (
-                        selectedTemplate.header_content
-                      ) : (
-                        <div className="media-preview">
-                          {selectedTemplate.header_type === 'image' ? (
-                            <Image size={48} />
-                          ) : (
-                            <Video size={48} />
-                          )}
-                          <span>Media Attachment</span>
-                        </div>
-                      )}
-                    </div>
-                  )}
-                  <div className="template-body">
-                    {selectedTemplate.body_text}
-                  </div>
-                  {selectedTemplate.footer_text && (
-                    <div className="template-footer">
-                      {selectedTemplate.footer_text}
-                    </div>
-                  )}
-                </div>
-                
-                {/* Media upload button for media headers */}
-                {selectedTemplate.header_type && 
-                 ['image', 'video'].includes(selectedTemplate.header_type) && (
-                  <div className="media-upload-section">
-                    <button
-                      type="button"
-                      className="btn btn-secondary"
-                      onClick={() => setShowMediaUpload(true)}
-                    >
-                      <Upload size={16} />
-                      <span>Upload {selectedTemplate.header_type}</span>
-                    </button>
-                    
-                    {selectedMedia && (
-                      <div className="media-info">
-                        <span>{selectedMedia.name}</span>
-                        <span className="media-id">ID: {selectedMedia.id}</span>
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-            )}
-            
-            <div className="step-actions">
-              <button
-                type="button"
-                className="btn btn-primary"
-                onClick={() => goToNextStep(1)}
-              >
-                Next
-              </button>
-            </div>
-          </div>
-        )}
+      {/* Step 1: Template Selection */}
+{step === 1 && (
+  <div className="form-step card">
+    <h3 className="section-title">
+      <FileText size={18} />
+      <span>Select Template</span>
+    </h3>
+    
+    {showValidationError && !stepValidation.step1Valid && (
+      <div className="validation-error">
+        <AlertTriangle size={16} />
+        <span>Please select a template before proceeding.</span>
+      </div>
+    )}
+
+    <button 
+      className="btn btn-primary select-template-button"
+      onClick={() => setShowTemplateSelection(true)}
+    >
+      Select Template
+    </button>
+
+    {selectedTemplate && (
+      <div className="selected-template-preview">
+        <h4>Selected Template</h4>
+        <div className="template-info">
+          <p><strong>Name:</strong> {selectedTemplate.name}</p>
+          <p><strong>Category:</strong> {selectedTemplate.category}</p>
+        </div>
+      </div>
+    )}
+
+    {showTemplateSelection && (
+      <TemplateSelectionModal
+        templates={templates}
+        onClose={() => setShowTemplateSelection(false)}
+        onSelect={(template) => {
+          handleInputChange({
+            target: { name: 'templateId', value: template.id }
+          });
+          setShowTemplateSelection(false);
+          goToNextStep(1);
+        }}
+      />
+    )}
+
+    <div className="step-actions">
+      <button
+        type="button"
+        className="btn btn-primary"
+        onClick={() => goToNextStep(1)}
+        disabled={!stepValidation.step1Valid}
+      >
+        Next
+      </button>
+    </div>
+  </div>
+)}
+
+
         
          {/* Step 2: Audience Selection */}
          {step === 2 && (
@@ -689,11 +662,26 @@ function SendMessage() {
         
         {/* Step 4: Send Options */}
         {step === 4 && (
-          <div className="form-step card">
-            <h3 className="section-title">
-              <BarChart3 size={18} />
-              <span>Delivery Options</span>
-            </h3>
+  <div className="form-step card">
+    <h3 className="section-title">
+      <BarChart3 size={18} />
+      <span>Delivery Options</span>
+    </h3>
+
+    {/* Add Campaign Name field */}
+    <div className="form-field">
+      <label htmlFor="campaignName">Campaign Name</label>
+      <input
+        type="text"
+        id="campaignName"
+        name="campaignName"
+        value={formData.campaignName}
+        onChange={handleInputChange}
+        placeholder="Enter campaign name"
+        required
+        className={showValidationError && !formData.campaignName ? 'error' : ''}
+      />
+    </div>
             
             {showValidationError && !stepValidation.step4Valid && (
               <div className="validation-error">

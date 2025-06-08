@@ -26,7 +26,17 @@ function Dashboard() {
     isLoading: true,
     error: null
   });
-
+const formatActivityDate = (dateString) => {
+  if (!dateString) return '';
+  
+  const date = new Date(dateString);
+  
+  // Format as "May 23" (short month name and day)
+  return date.toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric'
+  });
+};
   const fetchDashboardData = async () => {
     try {
       const [stats, campaigns, templates, messageStats] = await Promise.all([
@@ -136,7 +146,7 @@ const statsCards = [
   };
 
   const activityData = {
-    labels: messageStats.timeline.map(item => item.date),
+    labels: messageStats.timeline.map(item => formatActivityDate(item.date)),
     datasets: [
       {
         label: 'Messages Sent',
@@ -150,6 +160,8 @@ const statsCards = [
       },
     ],
   };
+
+  
 
   return (
     <div className="dashboard">
@@ -213,59 +225,7 @@ const statsCards = [
           </div>
         </div>
 
-     
 
-        <div className="active-users card">
-          <div className="card-header">
-            <h3>Active Users</h3>
-            <div className="active-now">
-              <span className="active-dot"></span>
-              <span>8 online now</span>
-            </div>
-          </div>
-          <div className="user-list">
-            <div className="user-item">
-              <div className="user-avatar">
-                <Users size={16} />
-              </div>
-              <div className="user-info">
-                <span className="user-name">Alex Morgan</span>
-                <span className="user-role">Admin</span>
-              </div>
-              <span className="user-status online"></span>
-            </div>
-            <div className="user-item">
-              <div className="user-avatar">
-                <Users size={16} />
-              </div>
-              <div className="user-info">
-                <span className="user-name">Sarah Johnson</span>
-                <span className="user-role">Manager</span>
-              </div>
-              <span className="user-status online"></span>
-            </div>
-            <div className="user-item">
-              <div className="user-avatar">
-                <Users size={16} />
-              </div>
-              <div className="user-info">
-                <span className="user-name">Robert Chen</span>
-                <span className="user-role">Editor</span>
-              </div>
-              <span className="user-status offline"></span>
-            </div>
-            <div className="user-item">
-              <div className="user-avatar">
-                <Users size={16} />
-              </div>
-              <div className="user-info">
-                <span className="user-name">Jennifer Lee</span>
-                <span className="user-role">Viewer</span>
-              </div>
-              <span className="user-status online"></span>
-            </div>
-          </div>
-        </div>
       </section>
     </div>
   );

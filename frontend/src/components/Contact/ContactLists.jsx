@@ -1,7 +1,9 @@
 import { useState, useEffect } from 'react';
-import {contactService } from '../../api/contactService';
+import { contactService } from '../../api/contactService';
 import { Trash2, Loader, ChevronRight, UserPlus, Search } from 'lucide-react';
-import './ContactLists.css'; // Import the separate CSS file
+import './ContactLists.css';
+import AddListModal from './AddListModal';
+import AddContactModal from './AddContactModal';
 
 const ContactLists = () => {
   const [lists, setLists] = useState([]);
@@ -10,7 +12,12 @@ const ContactLists = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
+  const [showAddListModal, setShowAddListModal] = useState(false);
+  const [isAddingList, setIsAddingList] = useState(false);
+  const [successMessage, setSuccessMessage] = useState('');
+  const [isModalOpen, setIsModalOpen] = useState(false);
 
+  // Fetch lists on component mount
   useEffect(() => {
     const fetchData = async () => {
       try {
@@ -26,6 +33,7 @@ const ContactLists = () => {
     fetchData();
   }, []);
 
+  // Fetch contacts when a list is selected
   useEffect(() => {
     if (selectedList) {
       const fetchContacts = async () => {
@@ -47,15 +55,68 @@ const ContactLists = () => {
     try {
       await contactService.deleteContact(contactId);
       setContacts(contacts.filter(c => c.id !== contactId));
+      setSuccessMessage('Contact deleted successfully');
     } catch (err) {
       setError(err.message || 'Failed to delete contact');
+    }
+  };
+
+  const handleAddList = async (listName) => {
+    try {
+      setIsAddingList(true);
+      const response = await contactService.createList({ name: listName });
+      setLists(prevLists => [...prevLists, response.data]);
+      setSuccessMessage('List created successfully');
+    } catch (err) {
+      setError(err.message || 'Failed to create list');
+      throw err;
+    } finally {
+      setIsAddingList(false);
+    }
+  };
+
+  const handleSaveContact = async (contactData) => {
+    try {
+      setIsLoading(true);
+      let listId = contactData.listId;
+      
+      // Create new list if needed
+      if (contactData.newListName) {
+        const response = await contactService.createList({ name: contactData.newListName });
+        listId = response.data.id;
+        setLists(prevLists => [...prevLists, response.data]);
+      }
+      
+      // Create the contact
+      const newContact = await contactService.createContact({
+        ...contactData,
+        listId
+      });
+
+      // If the contact's list is currently selected, add it to the contacts array
+      if (selectedList === listId) {
+        setContacts(prevContacts => [...prevContacts, newContact.data]);
+      }
+
+      setSuccessMessage('Contact added successfully');
+      setIsModalOpen(false);
+
+      // Refresh contacts if we're viewing the list the contact was added to
+      if (selectedList === listId) {
+        const contactsResponse = await contactService.getContacts(listId);
+        setContacts(contactsResponse.data);
+      }
+    } catch (error) {
+      setError(error.message || 'Failed to save contact');
+    } finally {
+      setIsLoading(false);
     }
   };
 
   const filteredContacts = contacts.filter(contact => {
     const fullName = `${contact.fname} ${contact.lname}`.toLowerCase();
     return fullName.includes(searchTerm.toLowerCase()) || 
-           contact.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
+           contact.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
            contact.wanumber.includes(searchTerm);
   });
 
@@ -66,12 +127,14 @@ const ContactLists = () => {
       {error && (
         <div className="error-message">
           <span>{error}</span>
-          <button 
-            className="error-close-btn"
-            onClick={() => setError('')}
-          >
-            ×
-          </button>
+          <button className="error-close-btn" onClick={() => setError('')}>×</button>
+        </div>
+      )}
+
+      {successMessage && (
+        <div className="success-message">
+          <span>{successMessage}</span>
+          <button className="success-close-btn" onClick={() => setSuccessMessage('')}>×</button>
         </div>
       )}
       
@@ -104,7 +167,10 @@ const ContactLists = () => {
           )}
           
           <div className="add-list-container">
-            <button className="add-list-btn">
+            <button 
+              className="add-list-btn"
+              onClick={() => setShowAddListModal(true)}
+            >
               <UserPlus className="add-icon" />
               Add New List
             </button>
@@ -137,7 +203,10 @@ const ContactLists = () => {
                       onChange={(e) => setSearchTerm(e.target.value)}
                     />
                   </div>
-                  <button className="add-contact-btn">
+                  <button
+                    onClick={() => setIsModalOpen(true)}
+                    className="add-contact-btn"
+                  >
                     <UserPlus className="add-icon" />
                     Add Contact
                   </button>
@@ -184,7 +253,20 @@ const ContactLists = () => {
                   </table>
                 ) : (
                   <div className="empty-contacts">
-                    <div className="empty-contacts-message">No contacts found</div>
+                    <div className="empty-contacts-icon">
+                      <UserPlus size={48} />
+                    </div>
+                    <h3 className="empty-contacts-title">No contacts in this list</h3>
+                    <p className="empty-contacts-message">
+                      Get started by adding your first contact
+                    </p>
+                    <button
+                      onClick={() => setIsModalOpen(true)}
+                      className="btn btn-primary"
+                    >
+                      <UserPlus className="add-icon" />
+                      Add Contact
+                    </button>
                   </div>
                 )}
               </div>
@@ -192,16 +274,30 @@ const ContactLists = () => {
           ) : (
             <div className="no-list-selected">
               <div className="no-list-icon">
-                <svg className="contact-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
-                </svg>
+                <UserPlus size={48} />
               </div>
-              <p className="no-list-title">No list selected</p>
-              <p className="no-list-subtitle">Select a contact list from the sidebar to view its contacts</p>
+              <p className="no-list-title">Select a List</p>
+              <p className="no-list-subtitle">Choose a contact list from the sidebar to view and manage contacts</p>
             </div>
           )}
         </div>
       </div>
+
+      {/* Modals */}
+      {showAddListModal && (
+        <AddListModal
+          onClose={() => setShowAddListModal(false)}
+          onAdd={handleAddList}
+          isLoading={isAddingList}
+        />
+      )}
+
+      <AddContactModal
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        onSave={handleSaveContact}
+        existingLists={lists}
+      />
     </div>
   );
 };

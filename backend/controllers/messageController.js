@@ -13,6 +13,7 @@ class MessageController {
             try {
                 const {
                     templateId,
+                    campaignName,
                     audience_type,
                     list_id,
                     is_custom,
@@ -35,16 +36,18 @@ class MessageController {
                 // Normalize audience_type to lowercase
                 const normalizedAudienceType = audience_type ? audience_type.toLowerCase() : null;
                 // Check for URL buttons
-                const urlButtonResult = await pool.execute(`
-        SELECT 1 
-        FROM template_buttons tb 
-        WHERE tb.template_id = ? 
-        AND tb.type = 'url'
-        LIMIT 1
-    `, [templateId]);
-                console.log(urlButtonResult);
+                const [rows] = await pool.execute(`
+    SELECT 1 
+    FROM template_buttons tb 
+    WHERE tb.template_id = ? 
+    AND tb.type = 'url'
+    LIMIT 1
+`, [templateId]);
 
-                const hasUrlButton = urlButtonResult != null;
+                const hasUrlButton = rows.length > 0;
+
+                console.log("Has URL Button?", hasUrlButton);
+
 
                 // Validate audience type
                 const validAudienceTypes = ['all', 'list', 'custom'];
@@ -112,7 +115,7 @@ class MessageController {
                 // In MessageController.sendBulkMessages
 
                 const campaign = await Campaign.create({
-                    name: `Bulk Send - ${new Date().toLocaleString()}`,
+                    name: `${campaignName} - ${new Date().toLocaleString()}`,
                     templateId,
                     status: sendNow ? 'sending' : 'scheduled',
                     scheduledAt: sendNow ? null : scheduledAt,
@@ -259,22 +262,30 @@ class MessageController {
             }
         }
         // Add this helper method to MessageController
-    static async createMessageRecord({ messageId, campaignId, businessId, contactId, status, error = null }) {
+    static async createMessageRecord({ messageId, campaignId, businessId, contactId, status, error = null, timestamp = null }) {
         const connection = await pool.getConnection();
         try {
+            // Ensure we have required parameters
+            if (!messageId || !campaignId || !businessId || !contactId) {
+                throw new Error('Missing required parameters for message record');
+            }
+
             const [result] = await connection.execute(
-                `INSERT INTO messages 
-             (id, campaign_id,business_id, contact_id, status, error, created_at, updated_at)
-             VALUES (?, ?, ?, ?,?, ?, NOW(), NOW())`, [messageId, campaignId, businessId, contactId, status, error]
+                `INSERT INTO messages
+            (id, campaign_id, business_id, contact_id, status, error, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, NOW(), NOW())`, [messageId, campaignId, businessId, contactId, status, error]
             );
-            console.log(`Created message record for ${messageId}`);
+
+            console.log(`Created message record for ${messageId} with status ${status}`);
             return result;
         } catch (err) {
             console.error('Error creating message record:', {
-                error: err,
+                error: err.message,
                 messageId,
                 campaignId,
-                contactId
+                businessId,
+                contactId,
+                status
             });
             throw err;
         } finally {
@@ -513,20 +524,51 @@ class MessageController {
         }
         // controllers/messageController.js
 
-    static async processCampaignMessages(campaignId, contacts, fieldMappings, templateId, userId, business_id) {
+    static async processCampaignMessages(campaignId, contacts, fieldMappings, templateId, userId, businessId) {
+        try {
             // Get template
             const template = await Template.getByIdForSending(templateId, userId);
 
+            if (!template) {
+                throw new Error('Template not found or not accessible');
+            }
+
+            if (!template.whatsapp_id) {
+                throw new Error('Template is not approved on WhatsApp');
+            }
+
+            // Initialize counters for batch processing
+            let successCount = 0;
+            let failedCount = 0;
+            const errors = [];
+
+            // Check for URL buttons once
+            const [rows] = await pool.execute(`
+            SELECT 1
+            FROM template_buttons tb
+            WHERE tb.template_id = ?
+            AND tb.type = 'url'
+            LIMIT 1
+        `, [templateId]);
+
+            const hasUrlButton = rows.length > 0;
+            console.log("Has URL Button?", hasUrlButton);
+
+            // Process each contact with proper error handling
             for (const contact of contacts) {
                 try {
+                    // Validate contact data
+                    if (!contact || typeof contact !== 'object' || !contact.wanumber) {
+                        throw new Error('Invalid contact format - missing WhatsApp number');
+                    }
+
                     // Prepare message components
                     const message = {
                         to: contact.wanumber,
                         template: template.name,
                         language: { code: template.language },
-                        bodyParameters: [] // Add your parameters here
+                        bodyParameters: []
                     };
-
 
                     // Handle header if exists
                     if (template.header_type && template.header_content) {
@@ -555,46 +597,95 @@ class MessageController {
                         }
                     }
 
+                    // Handle buttons - just indicate if we have URL buttons that need parameters
+                    if (hasUrlButton) {
+                        message.buttons = true;
+                    }
 
                     // Send message
                     const sendResult = await WhatsAppService.sendTemplateMessage(message, userId, campaignId);
 
-                    // Create message record
+                    // Create message record with proper businessId
                     await MessageController.createMessageRecord({
-                        messageId: sendResult.messageId,
+                        messageId: sendResult.messageId || `msg-${Date.now()}-${Math.random()}`,
                         campaignId,
-                        business_id,
+                        businessId, // ← Fixed: using proper businessId parameter
                         contactId: contact.id,
-                        status: sendResult.status,
-                        error: sendResult.error,
-                        timestamp: sendResult.timestamp
+                        status: sendResult.status || 'sent',
+                        error: sendResult.error || null,
+                        timestamp: sendResult.timestamp || new Date().toISOString()
                     });
 
-                    // Update campaign stats
-                    await Campaign.incrementStats(campaignId, {
-                        delivered_count: sendResult.status === 'sent' ? 1 : 0,
-                        failed_count: sendResult.status === 'failed' ? 1 : 0
-                    });
-                } catch (error) {
-                    console.error('Error sending message:', error);
+                    // Update success counter
+                    if (sendResult.status === 'sent' || !sendResult.status) {
+                        successCount++;
+                    } else {
+                        failedCount++;
+                    }
+
+                } catch (contactError) {
+                    console.error(`Error sending message to contact ${contact.id}:`, contactError);
+
+                    // Create failed message record
                     await MessageController.createMessageRecord({
-                        messageId: `failed-${Date.now()}`,
+                        messageId: `failed-${Date.now()}-${Math.random()}`,
                         campaignId,
-                        business_id,
+                        businessId,
                         contactId: contact.id,
                         status: 'failed',
-                        error: error.message
+                        error: contactError.message
                     });
-                    await Campaign.incrementStats(campaignId, { failed_count: 1 });
+
+                    failedCount++;
+                    errors.push({
+                        contactId: contact.id,
+                        error: contactError.message
+                    });
                 }
             }
+
+            // Update campaign statistics after processing all contacts
+            await Campaign.updateStats(campaignId, {
+                recipientCount: contacts.length,
+                deliveredCount: successCount,
+                failedCount: failedCount,
+                readCount: 0 // Will be updated by webhooks
+            });
+
+            // Determine final campaign status
+            let campaignStatus = 'completed';
+            if (failedCount === contacts.length) {
+                campaignStatus = 'failed';
+            } else if (failedCount > 0) {
+                campaignStatus = 'partial'; // You might want to add this status
+            }
+
+            await Campaign.updateStatus(campaignId, campaignStatus);
+
+            console.log(`Campaign ${campaignId} processed: ${successCount} sent, ${failedCount} failed`);
+
+            return {
+                total: contacts.length,
+                success: successCount,
+                failed: failedCount,
+                errors: errors
+            };
+
+        } catch (error) {
+            console.error('Error in processCampaignMessages:', error);
+
+            // Update campaign to failed status
+            await Campaign.updateStatus(campaignId, 'failed');
+
+            throw error;
         }
-        // controllers/messageController.js
+    }
 
     static async saveDraft(req, res) {
         try {
             const {
                 templateId,
+                campaignName,
                 audience_type,
                 contacts,
                 fieldMappings,
@@ -621,7 +712,7 @@ class MessageController {
 
             // Create campaign as draft
             const campaign = await Campaign.create({
-                name: `Bulk Send - ${new Date().toLocaleString()}`,
+                name: `${campaignName} - ${new Date().toLocaleString()}`,
                 templateId,
                 status: 'draft',
                 scheduledAt,

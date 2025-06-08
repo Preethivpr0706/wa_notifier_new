@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Search, Eye, Edit, Trash, AlertCircle, Clock, RefreshCw, ExternalLink, Phone } from 'lucide-react';
+import { Plus, Search, Eye, Edit, Trash, AlertCircle, Clock, RefreshCw, ExternalLink, Phone, ChevronLeft, ChevronRight } from 'lucide-react';
 import { templateService } from '../../api/templateService';
 import './MessageTemplates.css';
 
@@ -16,10 +16,19 @@ function MessageTemplates() {
   const [isDeleting, setIsDeleting] = useState(false);
   const [templateToDelete, setTemplateToDelete] = useState(null);
   const [isCheckingStatus, setIsCheckingStatus] = useState(false);
+  
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage] = useState(12); // Show 12 templates per page
+  const [totalPages, setTotalPages] = useState(1);
 
   useEffect(() => {
     fetchTemplates();
-  }, [activeFilter]);
+  }, [activeFilter, currentPage]);
+
+  useEffect(() => {
+    setCurrentPage(1); // Reset to first page when filter changes
+  }, [activeFilter, searchQuery]);
 
   const fetchTemplates = async () => {
     try {
@@ -28,7 +37,7 @@ function MessageTemplates() {
       
       const filters = {};
       if (activeFilter !== 'all') {
-        if (['marketing', 'utility', 'authentication'].includes(activeFilter)) {
+        if (['marketing', 'utility'].includes(activeFilter)) {
           filters.category = activeFilter;
         } else if (['approved', 'pending', 'rejected', 'draft'].includes(activeFilter)) {
           filters.status = activeFilter;
@@ -176,26 +185,45 @@ function MessageTemplates() {
     };
   }, [templates]);
 
+  // Filter and paginate templates
   const filteredTemplates = templates.filter((template) => {
     const matchesSearch = template.name.toLowerCase().includes(searchQuery.toLowerCase());
     return matchesSearch;
   });
 
+  // Calculate pagination
+  const totalFilteredTemplates = filteredTemplates.length;
+  const calculatedTotalPages = Math.ceil(totalFilteredTemplates / itemsPerPage);
+  
+  useEffect(() => {
+    setTotalPages(calculatedTotalPages);
+  }, [calculatedTotalPages]);
+
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const endIndex = startIndex + itemsPerPage;
+  const paginatedTemplates = filteredTemplates.slice(startIndex, endIndex);
+
+  const handlePageChange = (newPage) => {
+    if (newPage >= 1 && newPage <= totalPages) {
+      setCurrentPage(newPage);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  };
+
   const getCategoryLabel = (category) => {
     const labels = {
       marketing: 'Marketing',
-      utility: 'Utility',
-      authentication: 'Authentication'
+      utility: 'Utility'
     };
     return labels[category] || category;
   };
 
   const getStatusClass = (status) => {
     const statusClasses = {
-      approved: 'status-approved',
-      pending: 'status-pending',
-      rejected: 'status-rejected',
-      draft: 'status-draft'
+      approved: 'message-templates__status--approved',
+      pending: 'message-templates__status--pending',
+      rejected: 'message-templates__status--rejected',
+      draft: 'message-templates__status--draft'
     };
     return statusClasses[status] || '';
   };
@@ -218,12 +246,12 @@ function MessageTemplates() {
     
     const diffDays = Math.floor((today - templateDay) / (1000 * 60 * 60 * 24));
     
-if (diffDays === 0) return 'Today';
-if (diffDays === 1) return 'Yesterday';
-if (diffDays < 7) return `${diffDays} days ago`;
-if (diffDays < 30) return `${Math.floor(diffDays / 7)} weeks ago`;
-if (diffDays < 365) return `${Math.floor(diffDays / 30)} months ago`;
-return `${Math.floor(diffDays / 365)} years ago`;
+    if (diffDays === 0) return 'Today';
+    if (diffDays === 1) return 'Yesterday';
+    if (diffDays < 7) return `${diffDays} days ago`;
+    if (diffDays < 30) return `${Math.floor(diffDays / 7)} weeks ago`;
+    if (diffDays < 365) return `${Math.floor(diffDays / 30)} months ago`;
+    return `${Math.floor(diffDays / 365)} years ago`;
   };
 
   const renderHeaderContent = (template) => {
@@ -232,28 +260,28 @@ return `${Math.floor(diffDays / 365)} years ago`;
     switch (template.header_type) {
       case 'text':
         return template.header_content && (
-          <div className="template-header-content">{template.header_content}</div>
+          <div className="message-templates__header-content">{template.header_content}</div>
         );
       case 'image':
         return (
-          <div className="template-header-image">
-            <div className="image-placeholder">
+          <div className="message-templates__header-image">
+            <div className="message-templates__image-placeholder">
               <span>Image Preview</span>
             </div>
           </div>
         );
       case 'document':
         return (
-          <div className="template-header-document">
-            <div className="document-icon">📄</div>
-            <div className="document-name">{template.header_content || 'Document.pdf'}</div>
+          <div className="message-templates__header-document">
+            <div className="message-templates__document-icon">📄</div>
+            <div className="message-templates__document-name">{template.header_content || 'Document.pdf'}</div>
           </div>
         );
       case 'video':
         return (
-          <div className="template-header-video">
-            <div className="video-icon">🎬</div>
-            <div className="video-name">{template.header_content || 'Video.mp4'}</div>
+          <div className="message-templates__header-video">
+            <div className="message-templates__video-icon">🎬</div>
+            <div className="message-templates__video-name">{template.header_content || 'Video.mp4'}</div>
           </div>
         );
       default:
@@ -265,25 +293,25 @@ return `${Math.floor(diffDays / 365)} years ago`;
     if (!buttons || buttons.length === 0) return null;
 
     return (
-      <div className="template-buttons">
+      <div className="message-templates__buttons">
         {buttons.map((button, index) => {
           if (button.type === 'url') {
             return (
-              <div key={index} className="template-button url-button">
+              <div key={index} className="message-templates__button message-templates__button--url">
                 <ExternalLink size={14} />
                 <span>{button.text}</span>
               </div>
             );
           } else if (button.type === 'call') {
             return (
-              <div key={index} className="template-button call-button">
+              <div key={index} className="message-templates__button message-templates__button--call">
                 <Phone size={14} />
                 <span>{button.text}</span>
               </div>
             );
           } else {
             return (
-              <div key={index} className="template-button">
+              <div key={index} className="message-templates__button">
                 {button.text}
               </div>
             );
@@ -295,16 +323,16 @@ return `${Math.floor(diffDays / 365)} years ago`;
 
   const renderTemplateContent = (template) => {
     return (
-      <div className="message-container">
-        <div className="message-bubble received-message">
+      <div className="message-templates__message-container">
+        <div className="message-templates__message-bubble message-templates__message-bubble--received">
           {renderHeaderContent(template)}
           
           {template.body_text && (
-            <div className="message-text">{template.body_text}</div>
+            <div className="message-templates__message-text">{template.body_text}</div>
           )}
           
           {template.footer_text && (
-            <div className="template-footer">{template.footer_text}</div>
+            <div className="message-templates__footer">{template.footer_text}</div>
           )}
           
           {template.buttons && template.buttons.length > 0 && (
@@ -317,19 +345,103 @@ return `${Math.floor(diffDays / 365)} years ago`;
 
   const renderTemplatePreview = (template) => {
     return (
-      <div className="phone-screen">
-        <div className="chat-header">
-          <div className="chat-avatar">
-            <div className="profile-initials">YB</div>
+      <div className="message-templates__phone-screen">
+        <div className="message-templates__chat-header">
+          <div className="message-templates__chat-avatar">
+            <div className="message-templates__profile-initials">YB</div>
           </div>
-          <div className="chat-info">
-            <div className="chat-name">Your Business</div>
-            <div className="chat-status">Business Account</div>
+          <div className="message-templates__chat-info">
+            <div className="message-templates__chat-name">Your Business</div>
+            <div className="message-templates__chat-status">Business Account</div>
           </div>
         </div>
         
-        <div className="chat-messages">
+        <div className="message-templates__chat-messages">
           {renderTemplateContent(template)}
+        </div>
+      </div>
+    );
+  };
+
+  const renderPagination = () => {
+    if (totalPages <= 1) return null;
+
+    const pageNumbers = [];
+    const maxVisiblePages = 5;
+    
+    let startPage = Math.max(1, currentPage - Math.floor(maxVisiblePages / 2));
+    let endPage = Math.min(totalPages, startPage + maxVisiblePages - 1);
+    
+    if (endPage - startPage + 1 < maxVisiblePages) {
+      startPage = Math.max(1, endPage - maxVisiblePages + 1);
+    }
+
+    for (let i = startPage; i <= endPage; i++) {
+      pageNumbers.push(i);
+    }
+
+    return (
+      <div className="message-templates__pagination">
+        <div className="message-templates__pagination-info">
+          Showing {startIndex + 1}-{Math.min(endIndex, totalFilteredTemplates)} of {totalFilteredTemplates} templates
+        </div>
+        
+        <div className="message-templates__pagination-controls">
+          <button
+            className="message-templates__pagination-btn message-templates__pagination-btn--prev"
+            onClick={() => handlePageChange(currentPage - 1)}
+            disabled={currentPage === 1}
+          >
+            <ChevronLeft size={16} />
+            Previous
+          </button>
+          
+          <div className="message-templates__pagination-numbers">
+            {startPage > 1 && (
+              <>
+                <button
+                  className="message-templates__pagination-number"
+                  onClick={() => handlePageChange(1)}
+                >
+                  1
+                </button>
+                {startPage > 2 && <span className="message-templates__pagination-ellipsis">...</span>}
+              </>
+            )}
+            
+            {pageNumbers.map(page => (
+              <button
+                key={page}
+                className={`message-templates__pagination-number ${
+                  page === currentPage ? 'message-templates__pagination-number--active' : ''
+                }`}
+                onClick={() => handlePageChange(page)}
+              >
+                {page}
+              </button>
+            ))}
+            
+            {endPage < totalPages && (
+              <>
+                {endPage < totalPages - 1 && <span className="message-templates__pagination-ellipsis">...</span>}
+                <button
+                  className="message-templates__pagination-number"
+                  onClick={() => handlePageChange(totalPages)}
+                >
+                  {totalPages}
+                </button>
+              </>
+            )}
+          </div>
+          
+          <button
+            className="message-templates__pagination-btn message-templates__pagination-btn--next"
+            onClick={() => handlePageChange(currentPage + 1)}
+            disabled={currentPage === totalPages}
+          >
+            Next
+            <ChevronRight size={16} />
+          </button>
         </div>
       </div>
     );
@@ -337,195 +449,202 @@ return `${Math.floor(diffDays / 365)} years ago`;
 
   return (
     <div className="message-templates">
-      <div className="page-header">
-        <h2>Message Templates</h2>
-        <button onClick={handleCreateTemplate} className="btn btn-primary">
-          <Plus size={16} />
+      <div className="message-templates__header">
+        <div className="message-templates__header-content">
+          <h1 className="message-templates__title">Message Templates</h1>
+          <p className="message-templates__subtitle">
+            Create and manage WhatsApp message templates for your business
+          </p>
+        </div>
+        <button onClick={handleCreateTemplate} className="message-templates__create-btn">
+          <Plus size={18} />
           <span>Create Template</span>
         </button>
       </div>
 
-      {error && <div className="error-alert">{error}</div>}
+      {error && (
+        <div className="message-templates__error-alert">
+          <AlertCircle size={16} />
+          {error}
+        </div>
+      )}
 
-      <div className="filters-bar">
-        <div className="search-container">
-          <Search size={16} className="search-icon" />
+      <div className="message-templates__filters-section">
+        <div className="message-templates__search-container">
+          <Search size={18} className="message-templates__search-icon" />
           <input
             type="text"
-            placeholder="Search templates..."
+            placeholder="Search templates by name..."
             value={searchQuery}
             onChange={handleSearchChange}
-            className="search-input"
+            className="message-templates__search-input"
           />
         </div>
         
-        <div className="filter-tabs">
-          <button 
-            className={`filter-tab ${activeFilter === 'all' ? 'active' : ''}`}
-            onClick={() => handleFilterChange('all')}
-          >
-            All
-          </button>
-          <button 
-            className={`filter-tab ${activeFilter === 'marketing' ? 'active' : ''}`}
-            onClick={() => handleFilterChange('marketing')}
-          >
-            Marketing
-          </button>
-          <button 
-            className={`filter-tab ${activeFilter === 'utility' ? 'active' : ''}`}
-            onClick={() => handleFilterChange('utility')}
-          >
-            Utility
-          </button>
-          <button 
-            className={`filter-tab ${activeFilter === 'authentication' ? 'active' : ''}`}
-            onClick={() => handleFilterChange('authentication')}
-          >
-            Authentication
-          </button>
-          <button 
-            className={`filter-tab ${activeFilter === 'approved' ? 'active' : ''}`}
-            onClick={() => handleFilterChange('approved')}
-          >
-            Approved
-          </button>
-          <button 
-            className={`filter-tab ${activeFilter === 'pending' ? 'active' : ''}`}
-            onClick={() => handleFilterChange('pending')}
-          >
-            Pending
-          </button>
-          <button 
-            className={`filter-tab ${activeFilter === 'draft' ? 'active' : ''}`}
-            onClick={() => handleFilterChange('draft')}
-          >
-            Draft
-          </button>
+        <div className="message-templates__filter-tabs">
+          {[
+            { key: 'all', label: 'All Templates' },
+            { key: 'marketing', label: 'Marketing' },
+            { key: 'utility', label: 'Utility' },
+            { key: 'approved', label: 'Approved' },
+            { key: 'pending', label: 'Pending' },
+            { key: 'draft', label: 'Draft' }
+          ].map(filter => (
+            <button 
+              key={filter.key}
+              className={`message-templates__filter-tab ${
+                activeFilter === filter.key ? 'message-templates__filter-tab--active' : ''
+              }`}
+              onClick={() => handleFilterChange(filter.key)}
+            >
+              {filter.label}
+            </button>
+          ))}
         </div>
       </div>
 
       {isLoading ? (
-        <div className="loading-state">
-          <div className="spinner"></div>
-          <p>Loading templates...</p>
+        <div className="message-templates__loading-state">
+          <div className="message-templates__spinner"></div>
+          <p className="message-templates__loading-text">Loading templates...</p>
         </div>
-      ) : filteredTemplates.length === 0 ? (
-        <div className="empty-state">
-          <AlertCircle size={48} />
-          <h3>No templates found</h3>
-          <p>Try adjusting your search or filter settings</p>
+      ) : paginatedTemplates.length === 0 ? (
+        <div className="message-templates__empty-state">
+          <AlertCircle size={48} className="message-templates__empty-icon" />
+          <h3 className="message-templates__empty-title">No templates found</h3>
+          <p className="message-templates__empty-description">
+            {searchQuery || activeFilter !== 'all' 
+              ? 'Try adjusting your search or filter settings' 
+              : 'Get started by creating your first message template'
+            }
+          </p>
+          {!searchQuery && activeFilter === 'all' && (
+            <button onClick={handleCreateTemplate} className="message-templates__empty-action-btn">
+              <Plus size={16} />
+              Create Your First Template
+            </button>
+          )}
         </div>
       ) : (
-        <div className="templates-grid">
-          {filteredTemplates.map((template) => (
-            <div key={template.id} className="template-card card">
-              <div className="template-header">
-                <div className="template-category">
-                  {getCategoryLabel(template.category)}
-                </div>
-               
-                <div className="template-status-container">
-                  <div className={`template-status ${getStatusClass(template.status)}`}>
-                    {template.status}
+        <>
+          <div className="message-templates__grid">
+            {paginatedTemplates.map((template) => (
+              <div key={template.id} className="message-templates__card">
+                <div className="message-templates__card-header">
+                  <div className="message-templates__category-badge">
+                    {getCategoryLabel(template.category)}
                   </div>
-                  {template.status === 'pending' && (
-                    <button 
-                      className="btn-icon" 
-                      onClick={() => handleCheckStatus(template.id)}
-                      title="Check status"
-                      disabled={isCheckingStatus}
-                    >
-                      <RefreshCw size={16} className={isCheckingStatus ? "spinning" : ""} />
-                    </button>
-                  )}
-                  {template.status === 'rejected' && template.rejection_reason && (
-                    <div className="rejection-reason">
-                      Reason: {template.rejection_reason}
+                 
+                  <div className="message-templates__status-container">
+                    <div className={`message-templates__status ${getStatusClass(template.status)}`}>
+                      {template.status}
                     </div>
-                  )}
+                    {template.status === 'pending' && (
+                      <button 
+                        className="message-templates__status-refresh-btn" 
+                        onClick={() => handleCheckStatus(template.id)}
+                        title="Check status"
+                        disabled={isCheckingStatus}
+                      >
+                        <RefreshCw size={14} className={isCheckingStatus ? "message-templates__spinning" : ""} />
+                      </button>
+                    )}
+                  </div>
                 </div>
-              </div>
-              
-              <h3 className="template-name">{template.name}</h3>
-              
-              <div className="template-preview">
-                {renderTemplateContent(template)}
-              </div>
-              
-              <div className="template-info">
-                <div className="info-item">
-                  <span className="info-label">Language:</span>
-                  <span className="info-value">{template.language}</span>
-                </div>
-                <div className="info-item">
-                  <Clock size={14} />
-                  <span className="info-value">{formatDate(template.created_at)}</span>
-                </div>
-              </div>
-              
-              <div className="template-actions">
-                <button 
-                  className="btn-secondary"
-                  onClick={() => handlePreviewTemplate(template)}
-                >
-                  <Eye size={16} />
-                  <span>Preview</span>
-                </button>
                 
-                {template.status === 'draft' && (
-                  <button
-                    className="btn btn-primary"
-                    onClick={() => handleSubmitDraft(template.id)}
-                    disabled={isLoading}
-                  >
-                    <RefreshCw size={16} />
-                    <span>Submit</span>
-                  </button>
+                <h3 className="message-templates__card-title">{template.name}</h3>
+                
+                <div className="message-templates__card-preview">
+                  {renderTemplateContent(template)}
+                </div>
+                
+                {template.status === 'rejected' && template.rejection_reason && (
+                  <div className="message-templates__rejection-reason">
+                    <AlertCircle size={14} />
+                    <span>Reason: {template.rejection_reason}</span>
+                  </div>
                 )}
                 
-                <div className="action-buttons">
+                <div className="message-templates__card-info">
+                  <div className="message-templates__info-item">
+                    <span className="message-templates__info-label">Language:</span>
+                    <span className="message-templates__info-value">{template.language}</span>
+                  </div>
+                  <div className="message-templates__info-item">
+                    <Clock size={14} />
+                    <span className="message-templates__info-value">{formatDate(template.created_at)}</span>
+                  </div>
+                </div>
+                
+                <div className="message-templates__card-actions">
                   <button 
-                    className="action-btn"
-                    onClick={() => handleEditTemplate(template)}
-                    title={template.status === 'draft' ? 'Continue editing' : 'Edit template'}
+                    className="message-templates__action-btn message-templates__action-btn--secondary"
+                    onClick={() => handlePreviewTemplate(template)}
                   >
-                    <Edit size={16} />
+                    <Eye size={16} />
+                    <span>Preview</span>
                   </button>
+                  
+                  {template.status === 'draft' && (
+                    <button
+                      className="message-templates__action-btn message-templates__action-btn--primary"
+                      onClick={() => handleSubmitDraft(template.id)}
+                      disabled={isLoading}
+                    >
+                      <RefreshCw size={16} />
+                      <span>Submit</span>
+                    </button>
+                  )}
+                  
+                  <div className="message-templates__icon-actions">
+                    <button 
+                      className="message-templates__icon-btn"
+                      onClick={() => handleEditTemplate(template)}
+                      title={template.status === 'draft' ? 'Continue editing' : 'Edit template'}
+                    >
+                      <Edit size={16} />
+                    </button>
 
-                  <button 
-                    className="action-btn delete-btn"
-                    onClick={() => confirmDelete(template.id)}
-                    title="Delete template"
-                  >
-                    <Trash size={16} />
-                  </button>
+                    <button 
+                      className="message-templates__icon-btn message-templates__icon-btn--delete"
+                      onClick={() => confirmDelete(template.id)}
+                      title="Delete template"
+                    >
+                      <Trash size={16} />
+                    </button>
+                  </div>
                 </div>
               </div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+          
+          {renderPagination()}
+        </>
       )}
       
       {deleteConfirm && (
-        <div className="modal-overlay">
-          <div className="modal-content">
-            <h3>Delete Template?</h3>
+        <div className="message-templates__modal-overlay">
+          <div className="message-templates__modal-content">
+            <h3 className="message-templates__modal-title">Delete Template?</h3>
             {templateToDelete?.status === 'draft' ? (
-              <p>This draft template will be permanently deleted from the system.</p>
+              <p className="message-templates__modal-description">
+                This draft template will be permanently deleted from the system.
+              </p>
             ) : templateToDelete?.whatsapp_id ? (
-              <div className="whatsapp-warning">
+              <div className="message-templates__whatsapp-warning">
                 <AlertCircle size={16} />
                 <span>This template is registered with WhatsApp (ID: {templateToDelete.whatsapp_id})</span>
               </div>
             ) : null}
-            <p>Are you sure you want to delete "{templateToDelete?.name}"?</p>
-            <div className="modal-actions">
-              <button className="btn btn-secondary" onClick={cancelDelete}>
+            <p className="message-templates__modal-description">
+              Are you sure you want to delete "{templateToDelete?.name}"?
+            </p>
+            <div className="message-templates__modal-actions">
+              <button className="message-templates__modal-btn message-templates__modal-btn--secondary" onClick={cancelDelete}>
                 Cancel
               </button>
               <button 
-                className="btn btn-danger" 
+                className="message-templates__modal-btn message-templates__modal-btn--danger" 
                 onClick={deleteTemplate}
                 disabled={isDeleting}
               >
@@ -537,14 +656,14 @@ return `${Math.floor(diffDays / 365)} years ago`;
       )}
 
       {selectedTemplate && (
-        <div className="modal-overlay" onClick={closePreview}>
-          <div className="modal-content preview-modal">
-            <div className="preview-header">
-              <h3>Template Preview</h3>
-              <button className="close-btn" onClick={closePreview}>×</button>
+        <div className="message-templates__modal-overlay" onClick={closePreview}>
+          <div className="message-templates__modal-content message-templates__preview-modal">
+            <div className="message-templates__preview-header">
+              <h3 className="message-templates__preview-title">Template Preview</h3>
+              <button className="message-templates__close-btn" onClick={closePreview}>×</button>
             </div>
-            <div className="preview-content">
-              <div className="phone-preview">
+            <div className="message-templates__preview-content">
+              <div className="message-templates__phone-preview">
                 {renderTemplatePreview(selectedTemplate)}
               </div>
             </div>

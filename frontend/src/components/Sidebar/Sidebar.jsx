@@ -87,9 +87,12 @@ import { authService } from '../../api/authService';
             <img src="/src/assets/images/whatsapp-logo.svg" alt="WhatsApp Logo" className="logo" />
             <span className="logo-text">WA Dashboard</span>
           </div>
-          <button className="toggle-button" onClick={toggleSidebar}>
-            {isOpen ? <X size={20} /> : <Menu size={20} />}
-          </button>
+         {isOpen && (
+  <button className="toggle-button" onClick={toggleSidebar}>
+    <X size={20} />
+  </button>
+)}
+
         </div>
 
         <nav className="sidebar-nav">
@@ -123,15 +126,7 @@ import { authService } from '../../api/authService';
                       <span className="submenu-text">Contact List</span>
                     </Link>
                   </li>
-                  <li className="submenu-item">
-                    <Link
-                      to="/contacts/add"
-                      className={`submenu-link ${location.pathname === '/contacts/add' ? 'active' : ''}`}
-                    >
-                      <PlusCircle size={16} />
-                      <span className="submenu-text">Add Contact</span>
-                    </Link>
-                  </li>
+                 
                   <li className="submenu-item">
     <Link
       to="/contacts/import"
