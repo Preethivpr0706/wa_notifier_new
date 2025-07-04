@@ -108,14 +108,22 @@ uploadFileToSession: async (sessionId, formData, onUploadProgress) => {
   },
   
   // Save template as draft
-  saveAsDraft: async (templateData) => {
-    try {
-      const response = await apiClient.post('/templates/draft', templateData);
-      return response.data;
-    } catch (error) {
-        throw new Error(error.response?.data?.message || 'Failed to save draft');
-    }
-  },
+ // Update saveAsDraft to handle document headers
+saveAsDraft: async (templateData) => {
+  try {
+    const response = await apiClient.post('/templates/draft', {
+      ...templateData,
+      header_type: templateData.headerType,
+      header_content: templateData.headerContent,
+      body_text: templateData.bodyText,
+      footer_text: templateData.footerText,
+      variables: templateData.variableSamples
+    });
+    return response.data;
+  } catch (error) {
+    throw new Error(error.response?.data?.message || 'Failed to save draft');
+  }
+},
   
   // Update existing template
 
@@ -181,9 +189,17 @@ submitDraftTemplate: async (templateId) => {
   }
 },
 // Add this method
+// Update updateDraftTemplate
 updateDraftTemplate: async (templateId, templateData) => {
   try {
-    const response = await apiClient.put(`/templates/draft/${templateId}`, templateData);
+    const response = await apiClient.put(`/templates/draft/${templateId}`, {
+      ...templateData,
+      header_type: templateData.headerType,
+      header_content: templateData.headerContent,
+      body_text: templateData.bodyText,
+      footer_text: templateData.footerText,
+      variables: templateData.variableSamples
+    });
     return response.data;
   } catch (error) {
     throw new Error(error.response?.data?.message || 'Failed to update draft template');

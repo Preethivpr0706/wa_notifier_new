@@ -112,6 +112,7 @@ class TemplateController {
     static async saveAsDraft(req, res) {
         try {
             const userId = req.user.id;
+            const businessId = req.user.businessId;
 
             // Transform the request body
             const templateData = {
@@ -128,7 +129,7 @@ class TemplateController {
             };
 
             // Save as draft
-            const template = await Template.saveAsDraft(templateData, userId);
+            const template = await Template.saveAsDraft(templateData, userId, businessId);
 
             res.status(200).json({
                 success: true,

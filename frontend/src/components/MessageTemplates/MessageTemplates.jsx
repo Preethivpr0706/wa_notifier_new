@@ -274,7 +274,7 @@ function MessageTemplates() {
         return (
           <div className="message-templates__header-document">
             <div className="message-templates__document-icon">📄</div>
-            <div className="message-templates__document-name">{template.header_content || 'Document.pdf'}</div>
+            <div className="message-templates__document-name">{'Document.pdf'}</div>
           </div>
         );
       case 'video':

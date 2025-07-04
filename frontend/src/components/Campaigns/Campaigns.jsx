@@ -351,12 +351,21 @@ const handleSendDraft = async (campaignId) => {
             </div>
         </>
     )}
+    
     {campaign.status === 'scheduled' && (
   <div className="scheduled-info">
     <Calendar size={16} />
     <span>{getScheduledDisplay(campaign)}</span>
   </div>
 )}
+ {campaign.headerType === 'document' && (
+    <div className="info-item">
+      <span className="info-label">Document:</span>
+      <span className="info-value">
+        {campaign.headerFilename || 'Document Attachment'}
+      </span>
+    </div>
+  )}
 </div>
               
               <div className="campaign-actions">

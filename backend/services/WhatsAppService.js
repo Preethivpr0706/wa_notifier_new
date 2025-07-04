@@ -62,6 +62,11 @@ class WhatsAppService {
                             header_handle: [template.headerContent] // This should be the handle from the upload
                         };
                         break;
+                    case 'document':
+                        headerComponent.example = {
+                            header_handle: [template.headerContent] // This should be the handle from the upload
+                        };
+
                 }
                 components.push(headerComponent);
             }
@@ -893,7 +898,7 @@ if (messageData.header) {
                 type: "document",
                 document: {
                     id: messageData.header.mediaId,
-                    filename: messageData.header.filename || "document"
+                   filename: messageData.header.filename || "document"
                 }
             });
         }
@@ -1046,18 +1051,25 @@ const businessConfig = await WhatsappConfigService.getConfigForUser(userId);
 
     // Method to validate media before upload
     static validateMediaForTemplate(file, headerType) {
-        const validations = {
-            image: {
-                allowedTypes: ['image/jpeg', 'image/jpg', 'image/png'],
-                maxSize: 5 * 1024 * 1024, // 5MB
-                aspectRatio: { min: 1, max: 3 } // Width/Height ratio
-            },
-            video: {
-                allowedTypes: ['video/mp4', 'video/3gpp'],
-                maxSize: 16 * 1024 * 1024, // 16MB
-                maxDuration: 60 // seconds
-            }
-        };
+  const validations = {
+    image: {
+      allowedTypes: ['image/jpeg', 'image/jpg', 'image/png'],
+      maxSize: 5 * 1024 * 1024,
+    },
+    video: {
+      allowedTypes: ['video/mp4', 'video/3gpp'],
+      maxSize: 16 * 1024 * 1024,
+    },
+    document: {
+      allowedTypes: [
+        'application/pdf', 
+        'application/vnd.ms-excel',
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+      ],
+      maxSize: 100 * 1024 * 1024,
+    }
+  };
+
 
         const validation = validations[headerType];
         if (!validation) {

@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate, useParams, useLocation } from 'react-router-dom';
-import { ArrowLeft, Camera, Video, ExternalLink, Phone, Copy, Plus, X, RefreshCw } from 'lucide-react';
+import { ArrowLeft, Camera, Video, ExternalLink, Phone, Copy, Plus, X, RefreshCw, File, FileText } from 'lucide-react';
 import { templateService } from '../../api/templateService';
 import { businessService } from '../../api/businessService';
 import './CreateTemplate.css';
@@ -49,132 +49,161 @@ function CreateTemplate() {
 
   // Load template data
   useEffect(() => {
-    const loadTemplateData = async () => {
-      try {
-        setIsLoading(true);
-        
-        if (id) {
-          // Editing existing template
-          const response = await templateService.getTemplateById(id);
-          const template = response.data.template;
-          loadTemplateIntoForm(template);
-        } else if (state?.draftTemplate) {
-          // Continuing draft template
-          loadTemplateIntoForm(state.draftTemplate);
-        }
-        
-        setError(null);
-      } catch (err) {
-        setError('Failed to load template: ' + err.message);
-      } finally {
-        setIsLoading(false);
+  const loadTemplateData = async () => {
+    try {
+      setIsLoading(true);
+      
+      if (id) {
+        // Editing existing template
+        const response = await templateService.getTemplateById(id);
+        const template = response.data.template;
+        loadTemplateIntoForm(template);
+      } else if (state?.draftTemplate) {
+        // Continuing draft template
+        loadTemplateIntoForm(state.draftTemplate);
       }
-    };
+      
+      setError(null);
+    } catch (err) {
+      setError('Failed to load template: ' + err.message);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
-    const loadTemplateIntoForm = (template) => {
-      const variables = extractVariables(template.body_text);
-      const variableSamples = {};
-      
-      variables.forEach(varName => {
-        variableSamples[varName] = template.variables?.[varName] || '';
-      });
-      
-      setFormData({
-        name: template.name,
-        category: template.category,
-        language: template.language,
-        headerType: template.header_type,
-        headerText: template.header_type === 'text' ? template.header_content : '',
-        headerContent: template.header_content,
-        bodyText: template.body_text,
-        footerText: template.footer_text || '',
-        buttons: template.buttons || [],
-        variableSamples,
-      });
-      
-      setHeaderType(template.header_type);
-    };
+  const loadTemplateIntoForm = (template) => {
+    const variables = extractVariables(template.body_text);
+    const variableSamples = {};
+    
+    variables.forEach(varName => {
+      variableSamples[varName] = template.variables?.[varName] || '';
+    });
+    
+    setFormData({
+      name: template.name,
+      category: template.category,
+      language: template.language,
+      headerType: template.header_type,
+      headerText: template.header_type === 'text' ? template.header_content : '',
+      headerContent: template.header_content,
+      bodyText: template.body_text,
+      footerText: template.footer_text || '',
+      buttons: template.buttons || [],
+      variableSamples,
+    });
+    
+    setHeaderType(template.header_type);
+    
+    // Set file preview if it's a media header
+    // Set file preview if it's a media header
+  if (template.header_type === 'document' && template.header_content) {
+    // Create a dummy file object for the preview
+    setHeaderFilePreview({ 
+      name: 'Uploaded Document', 
+      type: 'application/pdf' 
+    });
+  }
 
-    loadTemplateData();
-  }, [id, state?.draftTemplate]);
+  };
+
+  loadTemplateData();
+}, [id, state?.draftTemplate]);
 
   // File handling functions
   const handleFileSelect = (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
+  const file = e.target.files[0];
+  if (!file) return;
 
-    const isImage = file.type.startsWith('image/');
-    const isVideo = file.type.startsWith('video/');
-    const maxSize = headerType === 'video' ? 16 * 1024 * 1024 : 5 * 1024 * 1024;
+  const isImage = file.type.startsWith('image/');
+  const isVideo = file.type.startsWith('video/');
+  const isDocument = file.type === 'application/pdf';
+  const maxSize = 
+    headerType === 'video' ? 16 * 1024 * 1024 : 
+    headerType === 'document' ? 100 * 1024 * 1024 : 
+    5 * 1024 * 1024;
 
-    if (headerType === 'image' && !isImage) {
-      setError('Please select an image file (JPEG, PNG)');
-      return;
-    }
+  if (headerType === 'image' && !isImage) {
+    setError('Please select an image file (JPEG, PNG)');
+    return;
+  }
 
-    if (headerType === 'video' && !isVideo) {
-      setError('Please select a video file (MP4)');
-      return;
-    }
+  if (headerType === 'video' && !isVideo) {
+    setError('Please select a video file (MP4)');
+    return;
+  }
 
-    if (file.size > maxSize) {
-      setError(`File size exceeds the limit (${headerType === 'video' ? '16MB' : '5MB'})`);
-      return;
-    }
+  if (headerType === 'document' && !isDocument) {
+    setError('Please select a PDF document');
+    return;
+  }
 
-    setHeaderFile(file);
+  if (file.size > maxSize) {
+    setError(`File size exceeds the limit (${maxSize / (1024 * 1024)}MB)`);
+    return;
+  }
+
+  setHeaderFile(file);
+  if (headerType === 'document') {
+    setHeaderFilePreview(file); // Store the file object directly for documents
+  } else {
     const reader = new FileReader();
     reader.onloadend = () => setHeaderFilePreview(reader.result);
     reader.readAsDataURL(file);
-  };
+  }
+};
 
-  const uploadFile = async (file) => {
-    if (!file) return null;
+const uploadFile = async (file) => {
+  if (!file) return null;
+  
+  try {
+    setIsUploading(true);
+    setUploadProgress(0);
     
-    try {
-      setIsUploading(true);
-      setUploadProgress(0);
-      
-      const sessionResponse = await templateService.createUploadSession({
-        fileType: file.type,
-        fileName: file.name,
-        fileSize: file.size
-      });
-      
-      if (!sessionResponse?.data?.data?.id) {
-        throw new Error('Failed to create upload session');
-      }
-
-      const sessionId = sessionResponse.data.data.id;
-      const formData = new FormData();
-      formData.append('file', file);
-      formData.append('fileSize', file.size.toString());
-
-      const uploadResponse = await templateService.uploadFileToSession(
-        sessionId, 
-        formData,
-        (progressEvent) => {
-          if (progressEvent.lengthComputable) {
-            const progress = Math.round((progressEvent.loaded * 100) / progressEvent.total);
-            setUploadProgress(progress);
-          }
-        }
-      );
-      
-      const mediaHandle = uploadResponse?.data?.data?.h;
-      if (!mediaHandle) {
-        throw new Error('Upload completed but no media handle received');
-      }
-
-      return mediaHandle;
-    } catch (error) {
-      console.error('Upload error:', error);
-      setError(`File upload failed: ${error.response?.data?.message || error.message}`);
-      return null;
-    } finally {
-      setIsUploading(false);
+    const sessionResponse = await templateService.createUploadSession({
+      fileType: file.type,
+      fileName: file.name,
+      fileSize: file.size
+    });
+    
+    if (!sessionResponse?.data?.data?.id) {
+      throw new Error('Failed to create upload session');
     }
-  };
+
+    const sessionId = sessionResponse.data.data.id;
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('fileSize', file.size.toString());
+
+    // For documents, add filename if not PDF
+    if (headerType === 'document' && !file.name.endsWith('.pdf')) {
+      formData.append('filename', `${file.name}.pdf`);
+    }
+
+    const uploadResponse = await templateService.uploadFileToSession(
+      sessionId, 
+      formData,
+      (progressEvent) => {
+        if (progressEvent.lengthComputable) {
+          const progress = Math.round((progressEvent.loaded * 100) / progressEvent.total);
+          setUploadProgress(progress);
+        }
+      }
+    );
+    
+    const mediaHandle = uploadResponse?.data?.data?.h;
+    if (!mediaHandle) {
+      throw new Error('Upload completed but no media handle received');
+    }
+
+    return mediaHandle;
+  } catch (error) {
+    console.error('Upload error:', error);
+    setError(`File upload failed: ${error.response?.data?.message || error.message}`);
+    return null;
+  } finally {
+    setIsUploading(false);
+  }
+};
 
   // Form handling functions
   const handleHeaderTypeChange = (type) => {
@@ -265,100 +294,102 @@ function CreateTemplate() {
 
   // Form submission
   const handleSaveAsDraft = async () => {
-    try {
-      setIsLoading(true);
-      setError(null);
-      
-      const templateData = {
-        name: formData.name || 'Untitled Template',
-        category: formData.category,
-        language: formData.language,
-        headerType: formData.headerType,
-        headerText: headerType === 'text' ? formData.headerText : '',
-        headerContent: headerType === 'text' ? formData.headerText : formData.headerContent,
-        bodyText: formData.bodyText,
-        footerText: formData.footerText,
-        buttons: formData.buttons,
-        variableSamples: formData.variableSamples 
-      };
-      
-      // Upload file if needed
-      if ((headerType === 'image' || headerType === 'video') && headerFile && !templateData.headerContent) {
-        const mediaHandle = await uploadFile(headerFile);
-        if (mediaHandle) {
-          templateData.headerContent = mediaHandle;
-        }
+  try {
+    setIsLoading(true);
+    setError(null);
+    
+    const templateData = {
+      name: formData.name || 'Untitled Template',
+      category: formData.category,
+      language: formData.language,
+      headerType: formData.headerType,
+      headerText: headerType === 'text' ? formData.headerText : '',
+      headerContent: headerType === 'text' ? formData.headerText : formData.headerContent,
+      bodyText: formData.bodyText,
+      footerText: formData.footerText,
+      buttons: formData.buttons,
+      variableSamples: formData.variableSamples 
+    };
+    
+    // Upload file if needed (for image, video, or document)
+    if ((headerType === 'image' || headerType === 'video' || headerType === 'document') && 
+        headerFile && !templateData.headerContent) {
+      const mediaHandle = await uploadFile(headerFile);
+      if (mediaHandle) {
+        templateData.headerContent = mediaHandle;
       }
-
-      let response;
-      if (id || state?.draftTemplate?.id) {
-        // Update existing draft
-        templateData.id = id || state.draftTemplate.id;
-        response = await templateService.updateDraftTemplate(templateData.id, templateData);
-      } else {
-        // Create new draft
-        response = await templateService.saveAsDraft(templateData);
-      }
-      
-      navigate('/templates', {
-        state: { successMessage: 'Template saved as draft successfully!' }
-      });
-    } catch (err) {
-      setError('Error saving draft: ' + err.message);
-    } finally {
-      setIsLoading(false);
     }
-  };
 
-  const handleSubmitToWhatsApp = async () => {
-    try {
-      setIsLoading(true);
-      setError(null);
-      
-      let headerContent = formData.headerContent;
-      
-      // Upload file if needed
-      if ((headerType === 'image' || headerType === 'video') && headerFile && !headerContent) {
-        headerContent = await uploadFile(headerFile);
-        if (!headerContent) {
-          setError(`Failed to upload ${headerType}. Please try again.`);
-          setIsLoading(false);
-          return;
-        }
-      }
-      
-      const templateData = {
-        name: formData.name,
-        category: formData.category,
-        language: formData.language,
-        headerType: formData.headerType,
-        headerText: headerType === 'text' ? formData.headerText : '',
-        headerContent: headerType === 'text' ? formData.headerText : headerContent,
-        bodyText: formData.bodyText,
-        footerText: formData.footerText,
-        buttons: formData.buttons,
-        variableSamples: formData.variableSamples 
-      };
-
-      let response;
-      if (id || state?.draftTemplate?.id) {
-        // Submit existing template (draft or previously submitted)
-        const templateId = id || state.draftTemplate.id;
-        response = await templateService.submitDraftTemplate(templateId, templateData);
-      } else {
-        // Create and submit new template
-        response = await templateService.createTemplate(templateData);
-      }
-      
-      navigate('/templates', {
-        state: { successMessage: 'Template submitted to WhatsApp successfully!' }
-      });
-    } catch (err) {
-      setError('Error submitting template: ' + err.message);
-    } finally {
-      setIsLoading(false);
+    let response;
+    if (id || state?.draftTemplate?.id) {
+      // Update existing draft
+      templateData.id = id || state.draftTemplate.id;
+      response = await templateService.updateDraftTemplate(templateData.id, templateData);
+    } else {
+      // Create new draft
+      response = await templateService.saveAsDraft(templateData);
     }
-  };
+    
+    navigate('/templates', {
+      state: { successMessage: 'Template saved as draft successfully!' }
+    });
+  } catch (err) {
+    setError('Error saving draft: ' + err.message);
+  } finally {
+    setIsLoading(false);
+  }
+};
+
+ const handleSubmitToWhatsApp = async () => {
+  try {
+    setIsLoading(true);
+    setError(null);
+    
+    let headerContent = formData.headerContent;
+    
+    // Upload file if needed (for image, video, or document)
+    if ((headerType === 'image' || headerType === 'video' || headerType === 'document') && 
+        headerFile && !headerContent) {
+      headerContent = await uploadFile(headerFile);
+      if (!headerContent) {
+        setError(`Failed to upload ${headerType}. Please try again.`);
+        setIsLoading(false);
+        return;
+      }
+    }
+    
+    const templateData = {
+      name: formData.name,
+      category: formData.category,
+      language: formData.language,
+      headerType: formData.headerType,
+      headerText: headerType === 'text' ? formData.headerText : '',
+      headerContent: headerType === 'text' ? formData.headerText : headerContent,
+      bodyText: formData.bodyText,
+      footerText: formData.footerText,
+      buttons: formData.buttons,
+      variableSamples: formData.variableSamples 
+    };
+
+    let response;
+    if (id || state?.draftTemplate?.id) {
+      // Submit existing template (draft or previously submitted)
+      const templateId = id || state.draftTemplate.id;
+      response = await templateService.submitDraftTemplate(templateId, templateData);
+    } else {
+      // Create and submit new template
+      response = await templateService.createTemplate(templateData);
+    }
+    
+    navigate('/templates', {
+      state: { successMessage: 'Template submitted to WhatsApp successfully!' }
+    });
+  } catch (err) {
+    setError('Error submitting template: ' + err.message);
+  } finally {
+    setIsLoading(false);
+  }
+};
 
    // Add new state for business details
    const [businessDetails, setBusinessDetails] = useState({
@@ -410,6 +441,14 @@ function CreateTemplate() {
           <Video size={16} />
           <span>Video</span>
         </button>
+        <button
+        type="button"
+        className={`type-option ${headerType === 'document' ? 'active' : ''}`}
+        onClick={() => handleHeaderTypeChange('document')}
+      >
+        <File size={16} />
+        <span>Document</span>
+      </button>
       </div>
       
       {headerType === 'text' && (
@@ -527,6 +566,56 @@ function CreateTemplate() {
           </div>
         </div>
       )}
+      {/* Add document upload section */}
+    {headerType === 'document' && (
+  <div className="media-upload">
+    <div className={`upload-area ${headerFilePreview ? 'has-preview' : ''}`}>
+      {headerFilePreview ? (
+        <>
+          <div className="file-preview">
+            <FileText size={48} />
+            <span>{headerFilePreview.name}</span>
+          </div>
+          <div className="file-actions">
+            <button 
+              type="button" 
+              className="btn btn-secondary"
+              onClick={() => {
+                setHeaderFile(null);
+                setHeaderFilePreview(null);
+                setFormData(prev => ({...prev, headerContent: ''}));
+                if (fileInputRef.current) fileInputRef.current.value = '';
+              }}
+            >
+              Remove Document
+            </button>
+          </div>
+        </>
+      ) : (
+        <>
+          <FileText size={24} />
+          <p>Upload a document</p>
+          <span>PDF (max 100MB)</span>
+          <input
+            type="file"
+            ref={fileInputRef}
+            accept="application/pdf"
+            onChange={handleFileSelect}
+            style={{ display: 'none' }}
+          />
+          <button 
+            type="button" 
+            className="btn btn-secondary"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={isUploading}
+          >
+            {isUploading ? `Uploading ${uploadProgress}%` : 'Select File'}
+          </button>
+        </>
+      )}
+    </div>
+  </div>
+)}
     </div>
   );
 
@@ -845,6 +934,21 @@ function CreateTemplate() {
                   {headerType === 'text' && formData.headerText && (
                     <div className="wa-template-header">{formData.headerText}</div>
                   )}
+                  {headerType === 'document' && (
+                <div className="wa-template-media">
+                  {headerFilePreview ? (
+                    <div className="wa-document-preview">
+                      <FileText size={48} />
+                      <span>{headerFilePreview.name}</span>
+                    </div>
+                  ) : (
+                    <div className="wa-media-placeholder">
+                      <FileText size={24} color="#8696a0" />
+                      <span>Document</span>
+                    </div>
+                  )}
+                </div>
+              )}
                   
                   {/* Message Body */}
                   {formData.bodyText && (

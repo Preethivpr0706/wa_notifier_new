@@ -69,6 +69,7 @@ class Business {
                     name: user.name,
                     firstName: user.name.split(' ')[0] || '',
                     lastName: user.name.split(' ')[1] || '',
+                    phone: user.phone
                 },
                 business: {
                     id: user.business_id,

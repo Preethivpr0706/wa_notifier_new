@@ -59,6 +59,24 @@ class MediaUploadController {
                 });
             }
 
+            // Add document MIME type validation
+            const validMimeTypes = [
+                'image/jpeg', 'image/png',
+                'video/mp4',
+                'application/pdf',
+                'application/msword',
+                'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+                'application/vnd.ms-excel',
+                'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+            ];
+
+            if (!validMimeTypes.includes(file.mimetype)) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'Unsupported file type'
+                });
+            }
+
             // Verify file size matches the declared size
             const declaredSize = parseInt(req.body.fileSize) || file.size;
             if (file.size !== declaredSize) {

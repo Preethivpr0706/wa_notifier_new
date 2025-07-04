@@ -8,7 +8,11 @@ class Template {
         const connection = await pool.getConnection();
         try {
             await connection.beginTransaction();
-
+            const validHeaderTypes = ['text', 'image', 'video', 'document'];
+            if (!validHeaderTypes.includes(templateData.headerType)) {
+                throw new Error('Invalid header type');
+            }
+            console.log(businessId);
             const templateId = uuidv4();
             const {
                 name,
@@ -21,7 +25,6 @@ class Template {
                 buttons = [],
                 status = 'pending'
             } = templateData;
-
             // Insert template
             await connection.execute(
                 `INSERT INTO templates (
@@ -134,8 +137,7 @@ class Template {
         return templates.map(template => ({
             ...template,
             buttons: template.buttons ?
-                JSON.parse(`[${template.buttons}]`.replace(/\}\,\{/g, '},{')) :
-                []
+                JSON.parse(`[${template.buttons}]`.replace(/\}\,\{/g, '},{')) : []
         }));
     }
 
@@ -180,10 +182,10 @@ class Template {
                 await connection.execute(
                     'DELETE FROM template_buttons WHERE template_id = ?', [templateId]
                 );
-
                 // Insert new buttons
                 for (let i = 0; i < templateData.buttons.length; i++) {
                     const button = templateData.buttons[i];
+                    console.log(templateId, button.type, button.text, button.value, i);
                     await connection.execute(
                         `INSERT INTO template_buttons (
               id, template_id, type, text, value, button_order
@@ -249,7 +251,7 @@ class Template {
     }
 
     // Save template as draft
-    static async saveAsDraft(templateData, userId) {
+    static async saveAsDraft(templateData, userId, businessId) {
         const templateWithStatus = {
             ...templateData,
             status: 'draft'
@@ -260,7 +262,7 @@ class Template {
             return await this.update(templateData.id, templateWithStatus, userId);
         } else {
             // Create new draft
-            return await this.create(templateWithStatus, userId);
+            return await this.create(templateWithStatus, userId, businessId);
         }
     }
 

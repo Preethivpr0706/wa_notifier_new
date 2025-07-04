@@ -6,6 +6,7 @@ function MediaUploadModal({ isOpen, onClose, onUpload, fileType, progress }) {
   const [error, setError] = useState('');
   const fileInputRef = useRef(null);
 
+
   const handleFileChange = (e) => {
     const selectedFile = e.target.files[0];
     
@@ -13,18 +14,29 @@ function MediaUploadModal({ isOpen, onClose, onUpload, fileType, progress }) {
     
     // Validate file type
     if (fileType === 'image' && !selectedFile.type.startsWith('image/')) {
-      setError('Please select an image file');
+      setError('Please select an image file (JPEG, PNG)');
       return;
     }
     
     if (fileType === 'video' && !selectedFile.type.startsWith('video/')) {
-      setError('Please select a video file');
+      setError('Please select a video file (MP4, 3GPP)');
+      return;
+    }
+
+    if (fileType === 'document' && !selectedFile.type.match(/(pdf|application\/pdf|application\/vnd\.ms-excel|application\/vnd\.openxmlformats-officedocument\.spreadsheetml\.sheet)/)) {
+      setError('Please select a document file (PDF, Excel)');
       return;
     }
     
-    // Validate file size (max 16MB for WhatsApp)
-    if (selectedFile.size > 16 * 1024 * 1024) {
-      setError('File size must be less than 16MB');
+    // Validate file size
+    const maxSizes = {
+      image: 5 * 1024 * 1024, // 5MB
+      video: 16 * 1024 * 1024, // 16MB
+      document: 100 * 1024 * 1024 // 100MB
+    };
+    
+    if (selectedFile.size > maxSizes[fileType]) {
+      setError(`File size must be less than ${maxSizes[fileType] / (1024 * 1024)}MB`);
       return;
     }
     
@@ -73,13 +85,19 @@ function MediaUploadModal({ isOpen, onClose, onUpload, fileType, progress }) {
           onDragOver={handleDragOver}
           onClick={() => fileInputRef.current.click()}
         >
-          <input
-            type="file"
-            ref={fileInputRef}
-            onChange={handleFileChange}
-            accept={fileType === 'image' ? 'image/*' : 'video/*'}
-            style={{ display: 'none' }}
-          />
+         <input
+  type="file"
+  ref={fileInputRef}
+  onChange={handleFileChange}
+  accept={
+    fileType === 'image' ? 'image/*' : 
+    fileType === 'video' ? 'video/*' : 
+    '.pdf,.xlsx,.xls,.csv,.doc,.docx'
+  }
+  style={{ display: 'none' }}
+/>
+
+
           
           {file ? (
             <div className="file-info">
@@ -96,8 +114,11 @@ function MediaUploadModal({ isOpen, onClose, onUpload, fileType, progress }) {
           ) : (
             <div className="upload-prompt">
               <UploadCloud size={48} />
-              <p>Drag & drop your {fileType} here or click to browse</p>
-              <p className="hint">Max file size: 16MB</p>
+            
+<p>Drag & drop your {fileType === 'image' ? 'image' : fileType === 'video' ? 'video' : 'document'} here or click to browse</p>
+<p className="hint">
+  Max file size: {fileType === 'image' ? '5MB' : fileType === 'video' ? '16MB' : '100MB'}
+</p>
             </div>
           )}
         </div>

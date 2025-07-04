@@ -30,6 +30,7 @@ export const messageService = {
         throw new Error(response.data.message || 'Failed to send messages');
       }
       
+      
       return response.data;
     } catch (error) {
       console.error('Error details:', error.response?.data);

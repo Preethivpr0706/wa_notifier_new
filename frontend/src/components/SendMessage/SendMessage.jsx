@@ -1,18 +1,17 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { FileText, Users, Image, Video, Upload, BarChart3, Send, ChevronRight, AlertTriangle } from 'lucide-react';
+import { FileText, Users, Image, Video, Upload, Send, Calendar, Clock, AlertTriangle, Check, ChevronDown, ChevronUp } from 'lucide-react';
 import FieldMapper from './FieldMapper';
 import { templateService } from '../../api/templateService';
-import {contactService} from '../../api/contactService';
+import { contactService } from '../../api/contactService';
 import { messageService } from '../../api/messageService';
 import MediaUploadModal from './MediaUploadModal';
 import './SendMessage.css';
 import Papa from 'papaparse';
-import {TemplateSelectionModal} from './TemplateSelectionModal';
+import { TemplateSelectionModal } from './TemplateSelectionModal';
 
 function SendMessage() {
   const navigate = useNavigate();
-  const [step, setStep] = useState(1);
   const [templates, setTemplates] = useState([]);
   const [contacts, setContacts] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -23,19 +22,20 @@ function SendMessage() {
   const [contactLists, setContactLists] = useState([]);
   const [csvFields, setCsvFields] = useState([]);
   const [csvData, setCsvData] = useState([]);
-  const [fileName, setFileName] = useState([]);
+  const [fileName, setFileName] = useState('');
   const [validationErrors, setValidationErrors] = useState([]);
   const [successMessage, setSuccessMessage] = useState('');
   const [isDraftSaving, setIsDraftSaving] = useState(false);
-  // Form validation state
-  const [stepValidation, setStepValidation] = useState({
-    step1Valid: false,
-    step2Valid: false,
-    step3Valid: false, // Initialize as false - we'll validate based on whether required fields are mapped
-    step4Valid: false
-  });
-  const [showValidationError, setShowValidationError] = useState(false);
+  const [showTemplateSelection, setShowTemplateSelection] = useState(false);
   
+  // Section completion states
+  const [sectionStates, setSectionStates] = useState({
+    template: { completed: false, expanded: true },
+    audience: { completed: false, expanded: false },
+    mapping: { completed: false, expanded: false },
+    delivery: { completed: false, expanded: false }
+  });
+
   const [formData, setFormData] = useState({
     templateId: '',
     audienceType: 'all',
@@ -45,12 +45,11 @@ function SendMessage() {
     scheduledDate: '',
     sendNow: true,
     fieldMappings: {},
-     campaignName: '' 
+    campaignName: ''
   });
-  const fileInputRef = useRef(null);
-    const [showTemplateSelection, setShowTemplateSelection] = useState(false);
 
-  
+  const fileInputRef = useRef(null);
+
   // Fetch templates and contacts
   useEffect(() => {
     const fetchData = async () => {
@@ -59,7 +58,7 @@ function SendMessage() {
         const [templatesRes, contactsRes, listsRes] = await Promise.all([
           templateService.getTemplates({ status: 'approved' }),
           contactService.getContacts(),
-          contactService.getListsForSending() 
+          contactService.getListsForSending()
         ]);
         
         setTemplates(templatesRes.data?.templates || []);
@@ -75,110 +74,117 @@ function SendMessage() {
     fetchData();
   }, []);
 
-  // Validate each step when data changes
+  // Update section completion states
   useEffect(() => {
-    validateStep1();
-    validateStep2();
-    validateStep3(); // Add step 3 validation
-    validateStep4();
-  }, [formData, csvData, contacts]);
+    updateSectionStates();
+  }, [formData, csvData, contacts, templates]);
 
-  // Step 1 validation: Template selection
-  const validateStep1 = () => {
-    const isValid = !!formData.templateId;
-    setStepValidation(prev => ({ ...prev, step1Valid: isValid }));
-    return isValid;
-  };
-
-  // Step 2 validation: Audience selection
-  const validateStep2 = () => {
-    let isValid = false;
-    
-    if (formData.audienceType === 'all') {
-      isValid = contacts.length > 0;
-    } else if (formData.audienceType === 'list') {
-      isValid = !!formData.contactList;
-    } else if (formData.audienceType === 'custom') {
-      isValid = csvData.length > 0;
-    }
-    
-    setStepValidation(prev => ({ ...prev, step2Valid: isValid }));
-    return isValid;
-  };
-
-  // Step 3 validation: Field Mapping
-  const validateStep3 = () => {
-    // If selected template doesn't exist yet, can't validate
-    if (!formData.templateId) return false;
-    
+  const updateSectionStates = () => {
     const selectedTemplate = templates.find(t => t.id === formData.templateId);
-    if (!selectedTemplate) return false;
+    const templateVariables = selectedTemplate ? extractVariables(selectedTemplate.body_text) : [];
     
-    // Extract template variables
-    const templateVariables = extractVariables(selectedTemplate.body_text);
-    
-    // If no variables exist, validation passes automatically
-    if (templateVariables.length === 0) {
-      setStepValidation(prev => ({ ...prev, step3Valid: true }));
-      return true;
+    setSectionStates(prev => ({
+      ...prev,
+      template: {
+        ...prev.template,
+        completed: !!formData.templateId
+      },
+      audience: {
+        ...prev.audience,
+        completed: validateAudience()
+      },
+      mapping: {
+        ...prev.mapping,
+        completed: validateMapping(templateVariables)
+      },
+      delivery: {
+        ...prev.delivery,
+        completed: validateDelivery()
+      }
+    }));
+  };
+
+  const validateAudience = () => {
+    if (formData.audienceType === 'all') {
+      return contacts.length > 0;
+    } else if (formData.audienceType === 'list') {
+      return !!formData.contactList;
+    } else if (formData.audienceType === 'custom') {
+      return csvData.length > 0;
     }
-    
-    // Check if all required variables are mapped
-    const allVariablesMapped = templateVariables.every(variable => 
+    return false;
+  };
+
+  const validateMapping = (templateVariables) => {
+    if (templateVariables.length === 0) return true;
+    return templateVariables.every(variable => 
       formData.fieldMappings[variable] && formData.fieldMappings[variable] !== ''
     );
-    
-    setStepValidation(prev => ({ ...prev, step3Valid: allVariablesMapped }));
-    return allVariablesMapped;
   };
 
-  // Step 4 validation: Scheduling
-  // Update Step 4 validation
-const validateStep4 = () => {
-  let isValid = !!formData.campaignName; // Require campaign name
-  
-  if (!formData.sendNow) {
-    isValid = isValid && !!formData.scheduledDate && !!formData.scheduledTime;
-  }
-  
-  setStepValidation(prev => ({ ...prev, step4Valid: isValid }));
-  return isValid;
-};
+  const validateDelivery = () => {
+    let isValid = !!formData.campaignName;
+    if (!formData.sendNow) {
+      isValid = isValid && !!formData.scheduledDate && !!formData.scheduledTime;
+    }
+    return isValid;
+  };
 
-const handleClosePreview = () => {
-  setSelectedPreviewTemplate(null);
-};
+  const toggleSection = (section) => {
+    setSectionStates(prev => ({
+      ...prev,
+      [section]: {
+        ...prev[section],
+        expanded: !prev[section].expanded
+      }
+    }));
+  };
 
-  // Handler for proceeding to next step
-  const goToNextStep = (currentStep) => {
-    setShowValidationError(false);
+  const expandNextIncompleteSection = () => {
+    const sections = ['template', 'audience', 'mapping', 'delivery'];
+    const currentStates = sectionStates;
     
-    switch(currentStep) {
-      case 1:
-        if (validateStep1()) {
-          setStep(2);
-        } else {
-          setShowValidationError(true);
-        }
+    for (const section of sections) {
+      if (!currentStates[section].completed) {
+        setSectionStates(prev => ({
+          ...prev,
+          [section]: { ...prev[section], expanded: true }
+        }));
         break;
-      case 2:
-        if (validateStep2()) {
-          setStep(3);
-        } else {
-          setShowValidationError(true);
-        }
-        break;
-      case 3:
-        if (validateStep3()) {
-          setStep(4);
-        } else {
-          setShowValidationError(true);
-        }
-        break;
-      default:
-        break;
+      }
     }
   };
+
+  const handleInputChange = (e) => {
+    const { name, value, type, checked } = e.target;
+    setFormData(prev => ({
+      ...prev,
+      [name]: type === 'checkbox' ? checked : value
+    }));
+  };
+
+  const handleTemplateSelect = (template) => {
+  handleInputChange({
+    target: { name: 'templateId', value: template.id }
+  });
+  
+  setShowTemplateSelection(false);
+  
+  // Check if template has media header
+  if (template.header_type === 'image' || template.header_type === 'video' || template.header_type === 'document') {
+    setSelectedMedia(template.header_type);
+    setShowMediaUpload(true);
+  }
+  
+  // Auto-expand next section
+  setTimeout(() => {
+    setSectionStates(prev => ({
+      ...prev,
+      template: { ...prev.template, expanded: false },
+      audience: { ...prev.audience, expanded: true }
+    }));
+  }, 500);
+};
 
   const handleFileUpload = (e) => {
     const file = e.target.files[0];
@@ -187,20 +193,22 @@ const handleClosePreview = () => {
     setFileName(file.name);
     setValidationErrors([]);
     setSuccessMessage('');
-    setShowValidationError(false);
 
     Papa.parse(file, {
       header: true,
       skipEmptyLines: true,
       complete: (results) => {
         const { data, errors } = results;
+
+
+
+
         
         if (errors.length > 0) {
           setValidationErrors(errors.map(err => err.message));
           return;
         }
 
-        // Validate required fields
         const requiredFields = ['wanumber'];
         const validationErrors = [];
         const validData = data.filter(row => {
@@ -216,7 +224,6 @@ const handleClosePreview = () => {
           return;
         }
 
-        // Transform data to match expected contact structure
         const transformedData = validData.map(row => ({
           id: row.id || `csv-${Math.random().toString(36).substr(2, 9)}`,
           wanumber: row.wanumber,
@@ -230,7 +237,6 @@ const handleClosePreview = () => {
         setCsvFields(Object.keys(data[0]));
         setCsvData(transformedData);
         setSuccessMessage(`Successfully loaded ${transformedData.length} contacts`);
-        validateStep2(); // Re-validate step 2 after loading CSV
       },
       error: (error) => {
         setValidationErrors([`Error parsing CSV: ${error.message}`]);
@@ -238,57 +244,57 @@ const handleClosePreview = () => {
     });
   };
 
-  const handleInputChange = (e) => {
-    const { name, value, type, checked } = e.target;
+  const handleMediaUpload = async (file) => {
+  try {
+    setIsLoading(true);
+    setUploadProgress(0);
     
-    setFormData(prev => ({
-      ...prev,
-      [name]: type === 'checkbox' ? checked : value
-    }));
-  };
+    const response = await templateService.uploadMediaToWhatsApp(
+      file,
+      formData.templateId,
+      selectedTemplate.header_type
+    );
+
+    setSelectedMedia({
+      id:  response.whatsappMediaId,
+      type: file.type.startsWith('image') ? 'image' : 'video',
+      name: file.name
+    });
+    
+    setShowMediaUpload(false);
+
+    // After successful upload, expand the next section
+    setTimeout(() => {
+      setSectionStates(prev => ({
+        ...prev,
+        template: { ...prev.template, expanded: false },
+        audience: { ...prev.audience, expanded: true }
+      }));
+    }, 500);
+
+    setSuccessMessage(`${selectedTemplate.header_type} uploaded successfully!`);
+  } catch (err) {
+    setError('Failed to upload media: ' + (err.response?.data?.message || err.message));
+  } finally {
+    setIsLoading(false);
+    setUploadProgress(0);
+  }
+};
 
   const handleMappingChange = (mappings) => {
     setFormData(prev => ({
       ...prev,
       fieldMappings: mappings
     }));
-    // Validate step 3 when mappings change
-    setTimeout(validateStep3, 0);
-  };
-
-  const handleMediaUpload = async (file) => {
-    try {
-      setIsLoading(true);
-      setUploadProgress(0);
-      
-      // Use templateService instead of direct axios call
-      const response = await templateService.uploadMediaToWhatsApp(
-        file,
-        formData.templateId,
-        selectedTemplate.header_type
-      );
-
-      setSelectedMedia({
-        id: response.whatsappMediaId,
-        type: file.type.startsWith('image') ? 'image' : 'video',
-        name: file.name
-      });
-      
-      setShowMediaUpload(false);
-    } catch (err) {
-      setError('Failed to upload media: ' + (err.response?.data?.message || err.message));
-    } finally {
-      setIsLoading(false);
-      setUploadProgress(0);
-    }
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     
-    // Final validation before submission
-    if (!validateStep4()) {
-      setShowValidationError(true);
+    // Check if all sections are completed
+    const allCompleted = Object.values(sectionStates).every(section => section.completed);
+    if (!allCompleted) {
+      setError('Please complete all sections before sending.');
       return;
     }
     
@@ -299,19 +305,16 @@ const handleClosePreview = () => {
       
       if (formData.audienceType === 'all') {
         targetContacts = contacts;
-      } 
-      else if (formData.audienceType === 'list') {
+      } else if (formData.audienceType === 'list') {
         targetContacts = contacts.filter(c => c.list_id === formData.contactList);
-      }
-      else if (formData.audienceType === 'custom') {
+      } else if (formData.audienceType === 'custom') {
         targetContacts = csvData;
       }
       
-      // Ensure audienceType is lowercase to match backend expectations
       const payload = {
         templateId: formData.templateId,
-         campaignName: formData.campaignName,
-        audience_type: formData.audienceType.toLowerCase(), // Convert to lowercase
+        campaignName: formData.campaignName,
+        audience_type: formData.audienceType.toLowerCase(),
         contacts: targetContacts.map(c => ({
           id: c.id,
           wanumber: c.wanumber,
@@ -328,7 +331,6 @@ const handleClosePreview = () => {
         is_custom: formData.audienceType === 'custom'
       };
 
-      console.log('Sending payload:', payload); // Debug log
       const response = await messageService.sendBulkMessages(payload);
       navigate('/campaigns', { 
         state: { success: 'Messages sent successfully!' } 
@@ -357,7 +359,7 @@ const handleClosePreview = () => {
       
       const payload = {
         templateId: formData.templateId,
-         campaignName: formData.campaignName,
+        campaignName: formData.campaignName,
         audience_type: formData.audienceType.toLowerCase(),
         contacts: targetContacts.map(c => ({
           id: c.id,
@@ -385,123 +387,145 @@ const handleClosePreview = () => {
 
   const selectedTemplate = templates.find(t => t.id === formData.templateId);
   const contactFields = contacts.length > 0 ? Object.keys(contacts[0]) : [];
+  const templateVariables = selectedTemplate ? extractVariables(selectedTemplate.body_text) : [];
+
+  if (isLoading && templates.length === 0) {
+    return (
+      <div className="send-message-container send-message-component">
+        <div className="loading-state">
+          <div className="loading-spinner"></div>
+          <p>Loading templates and contacts...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div className="send-message">
-      <div className="page-header">
-        <h2>Send Message</h2>
+    <div className="send-message-container send-message-component">
+      <div className="send-message-header">
+        <h1 className="page-title">Create New Campaign</h1>
+        <p className="page-description">Configure and send personalized messages to your contacts</p>
       </div>
-      
-      {/* Progress steps... */}
-      <div className="progress-steps">
-        <div className={`step ${step >= 1 ? 'active' : ''}`}>
-          <span>1. Select Template</span>
-        </div>
-        <ChevronRight size={20} />
-        <div className={`step ${step >= 2 ? 'active' : ''}`}>
-          <span>2. Select Audience</span>
-        </div>
-        <ChevronRight size={20} />
-        <div className={`step ${step >= 3 ? 'active' : ''}`}>
-          <span>3. Map Fields</span>
-        </div>
-        <ChevronRight size={20} />
-        <div className={`step ${step >= 4 ? 'active' : ''}`}>
-          <span>4. Send</span>
-        </div>
-      </div>
-      
-      {error && <div className="error-alert">{error}</div>}
-      {successMessage && <div className="success-alert">{successMessage}</div>}
-      
-      <form onSubmit={handleSubmit}>
-        {/* Step 1: Template Selection */}
-      {/* Step 1: Template Selection */}
-{step === 1 && (
-  <div className="form-step card">
-    <h3 className="section-title">
-      <FileText size={18} />
-      <span>Select Template</span>
-    </h3>
-    
-    {showValidationError && !stepValidation.step1Valid && (
-      <div className="validation-error">
-        <AlertTriangle size={16} />
-        <span>Please select a template before proceeding.</span>
-      </div>
-    )}
 
-    <button 
-      className="btn btn-primary select-template-button"
-      onClick={() => setShowTemplateSelection(true)}
-    >
-      Select Template
-    </button>
-
-    {selectedTemplate && (
-      <div className="selected-template-preview">
-        <h4>Selected Template</h4>
-        <div className="template-info">
-          <p><strong>Name:</strong> {selectedTemplate.name}</p>
-          <p><strong>Category:</strong> {selectedTemplate.category}</p>
+      {error && (
+        <div className="alert alert-error">
+          <AlertTriangle size={20} />
+          <span>{error}</span>
         </div>
-      </div>
-    )}
+      )}
 
-    {showTemplateSelection && (
-      <TemplateSelectionModal
-        templates={templates}
-        onClose={() => setShowTemplateSelection(false)}
-        onSelect={(template) => {
-          handleInputChange({
-            target: { name: 'templateId', value: template.id }
-          });
-          setShowTemplateSelection(false);
-          goToNextStep(1);
-        }}
-      />
-    )}
+      {successMessage && (
+        <div className="alert alert-success">
+          <Check size={20} />
+          <span>{successMessage}</span>
+        </div>
+      )}
 
-    <div className="step-actions">
-      <button
-        type="button"
-        className="btn btn-primary"
-        onClick={() => goToNextStep(1)}
-        disabled={!stepValidation.step1Valid}
-      >
-        Next
-      </button>
+      <form onSubmit={handleSubmit} className="campaign-form">
+        {/* Template Selection Section */}
+        <div className={`form-section ${sectionStates.template.completed ? 'completed' : ''}`}>
+          <div className="section-header" onClick={() => toggleSection('template')}>
+            <div className="section-info">
+              <div className="section-icon">
+                {sectionStates.template.completed ? <Check size={20} /> : <FileText size={20} />}
+              </div>
+              <div className="section-title">
+                <h3>Select Message Template</h3>
+                <p>Choose a pre-approved template for your campaign</p>
+              </div>
+            </div>
+            <div className="section-controls">
+              {sectionStates.template.completed && selectedTemplate && (
+                <span className="selected-item">{selectedTemplate.name}</span>
+              )}
+              {sectionStates.template.expanded ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
+            </div>
+          </div>
+
+          {sectionStates.template.expanded && (
+            <div className="section-content">
+              <button 
+                type="button"
+                className="template-select-btn"
+                onClick={() => setShowTemplateSelection(true)}
+              >
+                <FileText size={20} />
+                {selectedTemplate ? 'Change Template' : 'Select Template'}
+              </button>
+
+{selectedTemplate && (
+  <div className="template-preview-card">
+    <div className="template-preview-header">
+      <h4>Selected Template</h4>
+      <span className="template-category">{selectedTemplate.category}</span>
+    </div>
+    <div className="template-preview-content">
+      {selectedTemplate.header_type === 'text' && selectedTemplate.header_content && (
+        <div className="template-header">{selectedTemplate.header_content}</div>
+      )}
+      {selectedTemplate.header_type === 'image' && (
+        <div className="template-media-placeholder">
+          <Image size={24} />
+          <span>Image Header</span>
+        </div>
+      )}
+      {selectedTemplate.header_type === 'video' && (
+        <div className="template-media-placeholder">
+          <Video size={24} />
+          <span>Video Header</span>
+        </div>
+      )}
+      {selectedTemplate.header_type === 'document' && (
+        <div className="template-media-placeholder">
+          <FileText size={24} />
+          <span>Document Header</span>
+          {selectedTemplate.header_filename && (
+            <span className="document-filename">{selectedTemplate.header_filename}</span>
+          )}
+        </div>
+      )}
+      <div className="template-body">{selectedTemplate.body_text}</div>
+      {selectedTemplate.footer_text && (
+        <div className="template-footer">{selectedTemplate.footer_text}</div>
+      )}
     </div>
   </div>
 )}
+            </div>
+          )}
+        </div>
 
-
-        
-         {/* Step 2: Audience Selection */}
-         {step === 2 && (
-          <div className="form-step card">
-            <h3 className="section-title">
-              <Users size={18} />
-              <span>Select Audience</span>
-            </h3>
-            
-            {showValidationError && !stepValidation.step2Valid && (
-              <div className="validation-error">
-                <AlertTriangle size={16} />
-                <span>{
-                  formData.audienceType === 'list' 
-                    ? 'Please select a contact list before proceeding.' 
-                    : formData.audienceType === 'custom' 
-                      ? 'Please upload a valid CSV file with contacts.' 
-                      : 'Please ensure you have contacts available.'
-                }</span>
+        {/* Audience Selection Section */}
+        <div className={`form-section ${sectionStates.audience.completed ? 'completed' : ''}`}>
+          <div className="section-header" onClick={() => toggleSection('audience')}>
+            <div className="section-info">
+              <div className="section-icon">
+                {sectionStates.audience.completed ? <Check size={20} /> : <Users size={20} />}
               </div>
-            )}
-            
-            <div className="form-field">
-              <label>Audience Type</label>
-              <div className="radio-group">
-                <label>
+              <div className="section-title">
+                <h3>Choose Your Audience</h3>
+                <p>Select who will receive this message</p>
+              </div>
+            </div>
+            <div className="section-controls">
+              {sectionStates.audience.completed && (
+                <span className="selected-item">
+                  {formData.audienceType === 'all' 
+                    ? `All Contacts (${contacts.length})` 
+                    : formData.audienceType === 'list'
+                      ? `Contact List (${contactLists.find(l => l.id === formData.contactList)?.contactCount || 0})`
+                      : `Custom CSV (${csvData.length})`
+                  }
+                </span>
+              )}
+              {sectionStates.audience.expanded ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
+            </div>
+          </div>
+
+          {sectionStates.audience.expanded && (
+            <div className="section-content">
+              <div className="audience-options">
+                <label className={`audience-option ${formData.audienceType === 'all' ? 'selected' : ''}`}>
                   <input
                     type="radio"
                     name="audienceType"
@@ -509,10 +533,13 @@ const handleClosePreview = () => {
                     checked={formData.audienceType === 'all'}
                     onChange={handleInputChange}
                   />
-                  All Contacts ({contacts.length})
+                  <div className="option-content">
+                    <div className="option-title">All Contacts</div>
+                    <div className="option-description">Send to all {contacts.length} contacts in your database</div>
+                  </div>
                 </label>
-                
-                <label>
+
+                <label className={`audience-option ${formData.audienceType === 'list' ? 'selected' : ''}`}>
                   <input
                     type="radio"
                     name="audienceType"
@@ -520,10 +547,13 @@ const handleClosePreview = () => {
                     checked={formData.audienceType === 'list'}
                     onChange={handleInputChange}
                   />
-                  Select from Existing Lists
+                  <div className="option-content">
+                    <div className="option-title">Existing Contact List</div>
+                    <div className="option-description">Choose from your saved contact lists</div>
+                  </div>
                 </label>
-                
-                <label>
+
+                <label className={`audience-option ${formData.audienceType === 'custom' ? 'selected' : ''}`}>
                   <input
                     type="radio"
                     name="audienceType"
@@ -531,264 +561,316 @@ const handleClosePreview = () => {
                     checked={formData.audienceType === 'custom'}
                     onChange={handleInputChange}
                   />
-                  Upload Custom CSV
+                  <div className="option-content">
+                    <div className="option-title">Upload CSV File</div>
+                    <div className="option-description">Import contacts from a CSV file</div>
+                  </div>
                 </label>
               </div>
-            </div>
-            
-            {formData.audienceType === 'list' && (
-              <div className="form-field">
-                <label htmlFor="contactList">Select Contact List</label>
-                <select
-                  id="contactList"
-                  name="contactList"
-                  value={formData.contactList}
-                  onChange={handleInputChange}
-                  className={showValidationError && !formData.contactList ? 'error' : ''}
-                >
-                  <option value="">Select a list</option>
-                  {contactLists.map(list => (
-                    <option key={list.id} value={list.id}>
-                      {list.name} ({list.contactCount || 0} contacts)
-                    </option>
-                  ))}
-                </select>
-              </div>
-            )}
-            
-            {formData.audienceType === 'custom' && (
-              <div className="form-field">
-                <label htmlFor="customAudience">Upload CSV File</label>
-                <input
-                  type="file"
-                  id="customAudience"
-                  name="customAudience"
-                  accept=".csv"
-                  onChange={handleFileUpload}
-                  ref={fileInputRef}
-                  className={showValidationError && csvData.length === 0 ? 'error' : ''}
-                />
-                {fileName && <div className="file-name">Selected file: {fileName}</div>}
-                
-                {validationErrors.length > 0 && (
-                  <div className="error-list">
-                    <h4>CSV Validation Errors:</h4>
-                    <ul>
-                      {validationErrors.map((err, index) => (
-                        <li key={index}>{err}</li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-                
-                {csvFields.length > 0 && (
-                  <div className="csv-preview">
-                    <p>Detected fields in CSV: {csvFields.join(', ')}</p>
-                    <p>Loaded {csvData.length} valid contacts.</p>
-                  </div>
-                )}
-              </div>
-            )}
-            
-            <div className="step-actions">
-              <button
-                type="button"
-                className="btn btn-secondary"
-                onClick={() => setStep(1)}
-              >
-                Back
-              </button>
-              <button
-                type="button"
-                className="btn btn-primary"
-                onClick={() => goToNextStep(2)}
-              >
-                Next
-              </button>
-            </div>
-          </div>
-        )}
-        
-       {/* Step 3: Field Mapping */}
-        {step === 3 && selectedTemplate && (
-          <div className="form-step card">
-            <h3 className="section-title">
-              <span>Map Template Variables</span>
-            </h3>
-            
-            {showValidationError && !stepValidation.step3Valid && (
-              <div className="validation-error">
-                <AlertTriangle size={16} />
-                <span>Please map all template variables before proceeding.</span>
-              </div>
-            )}
-            
-            {extractVariables(selectedTemplate.body_text).length > 0 ? (
-              // Show FieldMapper only if variables exist
-              <FieldMapper
-                templateVariables={extractVariables(selectedTemplate.body_text)}
-                contactFields={formData.audienceType === 'custom' ? csvFields : contactFields}
-                onMappingChange={handleMappingChange}
-                initialMappings={formData.fieldMappings} // Pass current mappings
-              />
-            ) : (
-              // Show message when no variables exist
-              <div className="no-variables-message">
-                <div className="info-alert">
-                  <p>This template doesn't contain any variables to map.</p>
-                  <p>You can proceed to the next step.</p>
-                </div>
-              </div>
-            )}
-            
-            <div className="step-actions">
-              <button
-                type="button"
-                className="btn btn-secondary"
-                onClick={() => setStep(2)}
-              >
-                Back
-              </button>
-              <button
-                type="button"
-                className="btn btn-primary"
-                onClick={() => goToNextStep(3)}
-              >
-                Next
-              </button>
-            </div>
-          </div>
-        )}
-        
-        {/* Step 4: Send Options */}
-        {step === 4 && (
-  <div className="form-step card">
-    <h3 className="section-title">
-      <BarChart3 size={18} />
-      <span>Delivery Options</span>
-    </h3>
 
-    {/* Add Campaign Name field */}
-    <div className="form-field">
-      <label htmlFor="campaignName">Campaign Name</label>
-      <input
-        type="text"
-        id="campaignName"
-        name="campaignName"
-        value={formData.campaignName}
-        onChange={handleInputChange}
-        placeholder="Enter campaign name"
-        required
-        className={showValidationError && !formData.campaignName ? 'error' : ''}
-      />
-    </div>
-            
-            {showValidationError && !stepValidation.step4Valid && (
-              <div className="validation-error">
-                <AlertTriangle size={16} />
-                <span>Please select both date and time for scheduled delivery.</span>
+              {formData.audienceType === 'list' && (
+                <div className="form-field">
+                  <label htmlFor="contactList">Select Contact List</label>
+                  <select
+                    id="contactList"
+                    name="contactList"
+                    value={formData.contactList}
+                    onChange={handleInputChange}
+                    className="select-field"
+                  >
+                    <option value="">Choose a contact list</option>
+                    {contactLists.map(list => (
+                      <option key={list.id} value={list.id}>
+                        {list.name} ({list.contactCount || 0} contacts)
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              {formData.audienceType === 'custom' && (
+                <div className="csv-upload-section">
+                  <div className="form-field">
+                    <label htmlFor="customAudience">Upload CSV File</label>
+                    <div className="file-upload-area">
+                      <input
+                        type="file"
+                        id="customAudience"
+                        name="customAudience"
+                        accept=".csv"
+                        onChange={handleFileUpload}
+                        ref={fileInputRef}
+                        className="file-input"
+                      />
+                      <div className="file-upload-content">
+                        <Upload size={24} />
+                        <div>
+                          <p className="upload-text">
+                            {fileName ? fileName : 'Drop your CSV file here or click to browse'}
+                          </p>
+                          <p className="upload-hint">Required fields: wanumber</p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {validationErrors.length > 0 && (
+                    <div className="alert alert-error">
+                      <AlertTriangle size={16} />
+                      <div>
+                        <p>CSV Validation Errors:</p>
+                        <ul>
+                          {validationErrors.map((err, index) => (
+                            <li key={index}>{err}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    </div>
+                  )}
+
+                  {csvFields.length > 0 && (
+                    <div className="csv-preview">
+                      <h4>CSV Preview</h4>
+                      <p>Detected fields: {csvFields.join(', ')}</p>
+                      <p className="contacts-loaded">{csvData.length} contacts loaded successfully</p>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Field Mapping Section */}
+        {selectedTemplate && (
+          <div className={`form-section ${sectionStates.mapping.completed ? 'completed' : ''}`}>
+            <div className="section-header" onClick={() => toggleSection('mapping')}>
+              <div className="section-info">
+                <div className="section-icon">
+                  {sectionStates.mapping.completed ? <Check size={20} /> : <FileText size={20} />}
+                </div>
+                <div className="section-title">
+                  <h3>Map Template Variables</h3>
+                  <p>Connect template placeholders with contact data</p>
+                </div>
+              </div>
+              <div className="section-controls">
+                {sectionStates.mapping.completed && templateVariables.length > 0 && (
+                  <span className="selected-item">{templateVariables.length} variables mapped</span>
+                )}
+                {templateVariables.length === 0 && (
+                  <span className="selected-item">No variables to map</span>
+                )}
+                {sectionStates.mapping.expanded ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
+              </div>
+            </div>
+
+            {sectionStates.mapping.expanded && (
+              <div className="section-content">
+                {templateVariables.length > 0 ? (
+                  <FieldMapper
+                    templateVariables={templateVariables}
+                    contactFields={formData.audienceType === 'custom' ? csvFields : contactFields}
+                    onMappingChange={handleMappingChange}
+                    initialMappings={formData.fieldMappings}
+                  />
+                ) : (
+                  <div className="no-mapping-needed">
+                    <div className="info-card">
+                      <Check size={24} />
+                      <div>
+                        <h4>No Variable Mapping Required</h4>
+                        <p>This template doesn't contain any variables that need to be mapped to contact fields.</p>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
-            
-            <div className="form-field checkbox-field">
-              <label>
+          </div>
+        )}
+
+        {/* Delivery Options Section */}
+        <div className={`form-section ${sectionStates.delivery.completed ? 'completed' : ''}`}>
+          <div className="section-header" onClick={() => toggleSection('delivery')}>
+            <div className="section-info">
+              <div className="section-icon">
+                {sectionStates.delivery.completed ? <Check size={20} /> : <Send size={20} />}
+              </div>
+              <div className="section-title">
+                <h3>Delivery Settings</h3>
+                <p>Configure when and how to send your campaign</p>
+              </div>
+            </div>
+            <div className="section-controls">
+              {sectionStates.delivery.completed && (
+                <span className="selected-item">
+                  {formData.sendNow ? 'Send Immediately' : `Scheduled for ${formData.scheduledDate} at ${formData.scheduledTime}`}
+                </span>
+              )}
+              {sectionStates.delivery.expanded ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
+            </div>
+          </div>
+
+          {sectionStates.delivery.expanded && (
+            <div className="section-content">
+              <div className="form-field">
+                <label htmlFor="campaignName">Campaign Name</label>
                 <input
-                  type="checkbox"
-                  name="sendNow"
-                  checked={formData.sendNow}
+                  type="text"
+                  id="campaignName"
+                  name="campaignName"
+                  value={formData.campaignName}
                   onChange={handleInputChange}
+                  placeholder="Enter a name for your campaign"
+                  className="input-field"
+                  required
                 />
-                Send immediately
-              </label>
-            </div>
-            
-            {!formData.sendNow && (
-              <div className="form-row">
-                <div className="form-field">
-                  <label htmlFor="scheduledDate">Date</label>
-                  <input
-                    type="date"
-                    id="scheduledDate"
-                    name="scheduledDate"
-                    value={formData.scheduledDate}
-                    onChange={handleInputChange}
-                    min={new Date().toISOString().split('T')[0]}
-                    required={!formData.sendNow}
-                    className={showValidationError && !formData.scheduledDate && !formData.sendNow ? 'error' : ''}
-                  />
-                </div>
-                
-                <div className="form-field">
-                  <label htmlFor="scheduledTime">Time</label>
-                  <input
-                    type="time"
-                    id="scheduledTime"
-                    name="scheduledTime"
-                    value={formData.scheduledTime}
-                    onChange={handleInputChange}
-                    required={!formData.sendNow}
-                    className={showValidationError && !formData.scheduledTime && !formData.sendNow ? 'error' : ''}
-                  />
-                </div>
               </div>
-            )}
-            
-            <div className="summary-section">
-              <h4>Summary</h4>
-              <p><strong>Template:</strong> {selectedTemplate?.name}</p>
-              <p><strong>Audience:</strong> {
-                formData.audienceType === 'all' 
-                  ? `All Contacts (${contacts.length})` 
-                  : formData.audienceType === 'list'
-                    ? `Contact List: ${contactLists.find(l => l.id === formData.contactList)?.name || 'Unknown'}`
-                    : `Custom CSV (${csvData.length} contacts)`
-              }</p>
-              <p><strong>Delivery:</strong> {formData.sendNow 
-                ? 'Immediate' 
-                : formData.scheduledDate && formData.scheduledTime
-                  ? `Scheduled for ${formData.scheduledDate} at ${formData.scheduledTime}`
-                  : 'Scheduled (incomplete)'
-              }</p>
+
+              <div className="delivery-timing">
+                <label className={`timing-option ${formData.sendNow ? 'selected' : ''}`}>
+                  <input
+                    type="checkbox"
+                    name="sendNow"
+                    checked={formData.sendNow}
+                    onChange={handleInputChange}
+                  />
+                  <div className="option-content">
+                    <div className="option-title">Send Immediately</div>
+                    <div className="option-description">Start sending messages right away</div>
+                  </div>
+                </label>
+
+                {!formData.sendNow && (
+                  <div className="schedule-fields">
+                    <div className="form-row">
+                      <div className="form-field">
+                        <label htmlFor="scheduledDate">
+                          <Calendar size={16} />
+                          Date
+                        </label>
+                        <input
+                          type="date"
+                          id="scheduledDate"
+                          name="scheduledDate"
+                          value={formData.scheduledDate}
+                          onChange={handleInputChange}
+                          min={new Date().toISOString().split('T')[0]}
+                          className="input-field"
+                          required={!formData.sendNow}
+                        />
+                      </div>
+
+                      <div className="form-field">
+                        <label htmlFor="scheduledTime">
+                          <Clock size={16} />
+                          Time
+                        </label>
+                        <input
+                          type="time"
+                          id="scheduledTime"
+                          name="scheduledTime"
+                          value={formData.scheduledTime}
+                          onChange={handleInputChange}
+                          className="input-field"
+                          required={!formData.sendNow}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
-            
-            <div className="step-actions">
-              <button
-                type="button"
-                className="btn btn-secondary"
-                onClick={() => setStep(3)}
-              >
-                Back
-              </button>
-                   
-              <button
-                type="button"
-                className="btn btn-outline-primary"
-                onClick={handleSaveAsDraft}
-                disabled={isLoading || isDraftSaving}
-              >
-                {isDraftSaving ? 'Saving...' : 'Save as Draft'}
-              </button>
+          )}
+        </div>
+
+        {/* Campaign Summary */}
+        {Object.values(sectionStates).some(section => section.completed) && (
+          <div className="campaign-summary">
+            <h3>Campaign Summary</h3>
+            <div className="summary-grid">
+              {selectedTemplate && (
+                <div className="summary-item">
+                  <FileText size={16} />
+                  <div>
+                    <span className="summary-label">Template</span>
+                    <span className="summary-value">{selectedTemplate.name}</span>
+                  </div>
+                </div>
+              )}
               
-              <button
-                type="submit"
-                className="btn btn-primary"
-                disabled={isLoading}
-              >
-                {isLoading ? 'Sending...' : 'Send Messages'}
-              </button>
+              {sectionStates.audience.completed && (
+                <div className="summary-item">
+                  <Users size={16} />
+                  <div>
+                    <span className="summary-label">Audience</span>
+                    <span className="summary-value">
+                      {formData.audienceType === 'all' 
+                        ? `${contacts.length} contacts` 
+                        : formData.audienceType === 'list'
+                          ? `${contactLists.find(l => l.id === formData.contactList)?.contactCount || 0} contacts`
+                          : `${csvData.length} contacts`
+                      }
+                    </span>
+                  </div>
+                </div>
+              )}
+
+              {sectionStates.delivery.completed && (
+                <div className="summary-item">
+                  <Send size={16} />
+                  <div>
+                    <span className="summary-label">Delivery</span>
+                    <span className="summary-value">
+                      {formData.sendNow ? 'Immediate' : `${formData.scheduledDate} at ${formData.scheduledTime}`}
+                    </span>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         )}
+
+        {/* Action Buttons */}
+        <div className="form-actions">
+          <button
+            type="button"
+            className="btn btn-secondary"
+            onClick={handleSaveAsDraft}
+            disabled={isLoading || isDraftSaving || !formData.templateId}
+          >
+            {isDraftSaving ? 'Saving...' : 'Save as Draft'}
+          </button>
+          
+          <button
+            type="submit"
+            className="btn btn-primary"
+            disabled={isLoading || !Object.values(sectionStates).every(section => section.completed)}
+          >
+            {isLoading ? 'Sending...' : 'Send Campaign'}
+            <Send size={16} />
+          </button>
+        </div>
       </form>
-      
+
+      {/* Template Selection Modal */}
+      {showTemplateSelection && (
+        <TemplateSelectionModal
+          templates={templates}
+          onClose={() => setShowTemplateSelection(false)}
+          onSelect={handleTemplateSelect}
+        />
+      )}
+
       {/* Media Upload Modal */}
-      <MediaUploadModal
-        isOpen={showMediaUpload}
-        onClose={() => setShowMediaUpload(false)}
-        onUpload={handleMediaUpload}
-        fileType={selectedTemplate?.header_type}
-        progress={uploadProgress}
-      />
+     <MediaUploadModal
+  isOpen={showMediaUpload}
+  onClose={() => setShowMediaUpload(false)}
+  fileType={selectedMedia}
+  progress={uploadProgress}
+  onUpload={handleMediaUpload} // Add this prop
+/>
     </div>
   );
 }
@@ -802,7 +884,7 @@ function extractVariables(text) {
   while (match = regex.exec(text)) {
     matches.push(match[1]);
   }
-  return [...new Set(matches)]; // Return unique variables
+  return [...new Set(matches)];
 }
 
 export default SendMessage;
