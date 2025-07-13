@@ -20,7 +20,7 @@ class Business {
                 `UPDATE businesses 
                  SET profile_image_url = ?,
                      updated_at = CURRENT_TIMESTAMP
-                 WHERE id = ?`, [imageUrl, business.id]
+                 WHERE id = ?`, [imageUrl, business.business.id]
             );
 
             // Delete old image file if it exists

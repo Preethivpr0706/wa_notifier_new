@@ -13,7 +13,8 @@ import { authService } from '../../api/authService';
     X,
     Users,
     PlusCircle,
-    List
+    List,
+    Reply
   } from 'lucide-react';
   import './Sidebar.css';
 
@@ -49,7 +50,17 @@ import { authService } from '../../api/authService';
         title: 'Settings',
         path: '/settings',
         icon: <Settings size={20} />
-      }
+      },
+      { 
+    title: 'Live Chat',
+    path: '/conversations',
+    icon: <MessageSquare size={20} />
+  },
+    {
+        title: 'Quick Replies',
+        path: '/quick-replies',
+        icon: <Reply size={20} />
+    },
     ];
 
     const handleLogout = () => {

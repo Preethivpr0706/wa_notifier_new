@@ -3,60 +3,63 @@ const express = require('express');
 const cors = require('cors');
 const path = require('path');
 const fs = require('fs');
+const http = require('http');
 const { authenticate } = require('./middleware/auth');
 const { testConnection } = require('./config/database');
 const templateRoutes = require('./routes/templateRoutes');
-// Add this with other route imports
 const contactRoutes = require('./routes/contactRoutes');
 const messageRoutes = require('./routes/messageRoutes');
 const businessRoutes = require('./routes/businessRoutes');
 const campaignRoutes = require('./routes/campaignRoutes');
 const authRoutes = require('./routes/authRoutes');
+const conversationRoutes = require('./routes/conversationRoutes');
+const redirectRoutes = require('./routes/redirectRoutes');
+const dashboardRoutes = require('./routes/dashboardRoutes');
 const Message = require('./controllers/messageController');
-
 const SchedulerService = require('./services/schedulerService');
+const WSServer = require('./webSocket/wsSocket');
 
 require('dotenv').config();
 
 const app = express();
 
 // Middleware
-app.use(cors());
+app.use(cors({
+    origin: process.env.NODE_ENV === 'production' ?
+        process.env.FRONTEND_URL : ['http://localhost:3000', 'http://localhost:5173'],
+    credentials: true
+}));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 // Test database connection
 testConnection();
+
+// Create HTTP server first
+const server = http.createServer(app);
+
+// Create WebSocket server and make it available to routes
+const wss = new WSServer(server);
+app.set('wss', wss);
+
+// Add WebSocket instance to all requests for controllers to use
+app.use((req, res, next) => {
+    req.wss = wss;
+    next();
+});
+
 // Routes
 app.use('/api/templates', authenticate, templateRoutes);
-
 app.use('/api/auth', authRoutes);
-// Add this with other route middleware
 app.use('/api/contacts', authenticate, contactRoutes);
-
 app.use('/api/messages/', messageRoutes);
-
 app.use('/api/campaigns', authenticate, campaignRoutes);
-
 app.use('/api/business', authenticate, businessRoutes);
-
-
-const redirectRoutes = require('./routes/redirectRoutes');
 app.use('/api/redirect', redirectRoutes);
-
-// server.js
-const dashboardRoutes = require('./routes/dashboardRoutes');
-
-// Add this with your other routes
 app.use('/api/dashboard', authenticate, dashboardRoutes);
+app.use('/api/conversations', authenticate, conversationRoutes);
 
-
-// Error handling
-app.use((req, res, next) => {
-    console.log('404 - Route not found:', req.originalUrl);
-    res.status(404).send('Route not found');
-});
-// Add to your server initialization code
+// Scheduled tasks
 setInterval(async() => {
     try {
         await Message.checkStalledMessages();
@@ -65,13 +68,11 @@ setInterval(async() => {
     }
 }, 15 * 60 * 1000); // Check every 15 minutes
 
-
-
-// Check for scheduled campaigns every minute
 setInterval(() => {
     SchedulerService.processScheduledCampaigns();
 }, 60000);
-// Add this with your other middleware
+
+// Static files
 app.use('/uploads', express.static(
     path.join(__dirname, 'public/uploads'), {
         maxAge: '1y',
@@ -81,7 +82,7 @@ app.use('/uploads', express.static(
     }
 ));
 
-// Add route to verify static files
+// Test route
 app.get('/check-uploads', (req, res) => {
     const testPath = path.join(__dirname, 'public/uploads/business-profile');
     const exists = fs.existsSync(testPath);
@@ -93,6 +94,17 @@ app.get('/check-uploads', (req, res) => {
     });
 });
 
+// WebSocket status route
+app.get('/api/websocket/status', (req, res) => {
+    res.json({
+        connected: true,
+        connectedBusinesses: wss.getConnectedBusinesses(),
+        totalConnections: wss.getConnectedBusinesses().reduce((total, businessId) => {
+            return total + wss.getConnectionCount(businessId);
+        }, 0)
+    });
+});
+
 // Root route
 app.get('/', (req, res) => {
     res.send('WhatsApp Templates API is running');
@@ -100,7 +112,6 @@ app.get('/', (req, res) => {
 
 // Error handling middleware
 app.use((err, req, res, next) => {
-    // Handle Multer errors
     if (err.code === 'LIMIT_FILE_SIZE') {
         return res.status(413).json({
             success: false,
@@ -114,7 +125,8 @@ app.use((err, req, res, next) => {
             message: 'Invalid file type (only JPEG, PNG, GIF allowed)'
         });
     }
-    console.error(err.stack);
+
+    console.error('Error:', err.stack);
     res.status(500).json({
         success: false,
         message: 'Server error',
@@ -122,10 +134,29 @@ app.use((err, req, res, next) => {
     });
 });
 
-// Start server
-const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => {
-    console.log(`Server running on port ${PORT}`);
+// 404 handler
+app.use((req, res, next) => {
+    console.log('404 - Route not found:', req.originalUrl);
+    res.status(404).json({
+        success: false,
+        message: 'Route not found'
+    });
 });
 
-module.exports = app;
+// Start server with WebSocket support
+const PORT = process.env.PORT || 5000;
+server.listen(PORT, () => {
+    console.log(`Server running on port ${PORT}`);
+    console.log(`WebSocket server is ready at ws://localhost:${PORT}/ws`);
+});
+
+// Graceful shutdown
+process.on('SIGTERM', () => {
+    console.log('SIGTERM received, shutting down gracefully');
+    server.close(() => {
+        console.log('Server closed');
+        process.exit(0);
+    });
+});
+
+module.exports = { app, wss };

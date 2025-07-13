@@ -325,15 +325,97 @@ class MessageController {
         }
     }
 
+    /*
+        static async handleWebhook(req, res) {
+            try {
+                console.log('Raw webhook payload:', JSON.stringify(req.body, null, 2)); // Log full payload
+                const { entry } = req.body;
+                res.status(200).send('EVENT_RECEIVED');
+                console.log(JSON.stringify(entry, 2));
+                for (const item of entry) {
+                    // Get business ID from phone number ID
+                    const phoneNumberId = item.changes[0] && item.changes[0].value && item.changes[0].value.metadata && item.changes[0].value.metadata.phone_number_id ? item.changes[0].value.metadata.phone_number_id : null;
+                    if (!phoneNumberId) continue;
+
+                    // Get business settings
+                    const [settings] = await pool.execute(
+                        'SELECT business_id FROM business_settings WHERE whatsapp_phone_number_id = ?', [phoneNumberId]
+                    );
+
+                    if (!settings.length) continue;
+                    const businessId = settings[0].business_id;
+                    for (const change of item.changes) {
+
+                        if (change.value.statuses) {
+                            for (const status of change.value.statuses) {
+                                try {
+                                    const { id: messageId, status: whatsappStatus, timestamp } = status;
+
+                                    // Map WhatsApp status to our status
+                                    let messageStatus;
+                                    console.log('messageStatus!!!!!!!!!!!!!!!!1111111   ', messageId, whatsappStatus)
+                                    switch (whatsappStatus) {
+                                        case 'sent':
+                                            messageStatus = 'sent';
+                                            break;
+                                        case 'delivered':
+                                            messageStatus = 'delivered';
+                                            break;
+                                        case 'read':
+                                            messageStatus = 'read';
+                                            break;
+                                        case 'failed':
+                                            messageStatus = 'failed';
+                                            break;
+                                        default:
+                                            continue; // Skip unknown statuses
+                                    }
+
+                                    // Update message status
+                                    await MessageController.updateMessageStatus(
+                                        messageId,
+                                        messageStatus,
+                                        timestamp
+                                    );
+
+                                    // Get campaign for this message
+                                    const campaign = await Campaign.getByMessageId(messageId);
+                                    if (!campaign) continue;
+
+                                    // Recalculate all stats from messages table
+                                    await Campaign.calculateStatsFromMessages(campaign.id);
+                                } catch (error) {
+                                    console.error('Error processing status update:', error);
+                                }
+                            }
+                        }
+                    }
+                }
+            } catch (error) {
+                console.error('Webhook processing error:', error);
+            }
+        }
+    */
+    // In your messageController.js or a new webhookController.js
 
     static async handleWebhook(req, res) {
         try {
-            console.log('Raw webhook payload:', JSON.stringify(req.body, null, 2)); // Log full payload
+            console.log('Raw webhook payload:', JSON.stringify(req.body, null, 2));
             const { entry } = req.body;
+
+            // First respond to the webhook to prevent timeouts
             res.status(200).send('EVENT_RECEIVED');
-            console.log(JSON.stringify(entry, 2));
+
+            // Get WebSocket server instance
+            const wss = req.app.get('wss');
+
+            if (!wss) {
+                console.error('WebSocket server instance not found in app');
+                // Don't return error, continue processing without WebSocket
+            }
+
+            // Process status updates
             for (const item of entry) {
-                // Get business ID from phone number ID
                 const phoneNumberId = item.changes[0] && item.changes[0].value && item.changes[0].value.metadata && item.changes[0].value.metadata.phone_number_id ? item.changes[0].value.metadata.phone_number_id : null;
                 if (!phoneNumberId) continue;
 
@@ -344,8 +426,9 @@ class MessageController {
 
                 if (!settings.length) continue;
                 const businessId = settings[0].business_id;
-                for (const change of item.changes) {
 
+                for (const change of item.changes) {
+                    // Process message status updates
                     if (change.value.statuses) {
                         for (const status of change.value.statuses) {
                             try {
@@ -353,7 +436,6 @@ class MessageController {
 
                                 // Map WhatsApp status to our status
                                 let messageStatus;
-                                console.log('messageStatus!!!!!!!!!!!!!!!!1111111   ', messageId, whatsappStatus)
                                 switch (whatsappStatus) {
                                     case 'sent':
                                         messageStatus = 'sent';
@@ -371,22 +453,53 @@ class MessageController {
                                         continue; // Skip unknown statuses
                                 }
 
-                                // Update message status
+                                // Update message status in chat_messages table
+                                await pool.execute(
+                                    `UPDATE chat_messages 
+                                SET status = ?, 
+                                updated_at = NOW() 
+                                WHERE whatsapp_message_id = ?`, [messageStatus, messageId]
+                                );
+
+                                // Update message status in messages table
                                 await MessageController.updateMessageStatus(
                                     messageId,
                                     messageStatus,
+                                    whatsappStatus,
                                     timestamp
                                 );
+
+                                // **NEW: Notify WebSocket clients about status update**
+                                if (wss && typeof wss.notifyMessageStatus === 'function') {
+                                    try {
+                                        console.log(`Notifying WebSocket clients about message status update: ${messageId} -> ${messageStatus}`);
+                                        wss.notifyMessageStatus(businessId, messageId, messageStatus);
+                                    } catch (wsError) {
+                                        console.error('Error notifying WebSocket clients about status update:', wsError);
+                                    }
+                                }
 
                                 // Get campaign for this message
                                 const campaign = await Campaign.getByMessageId(messageId);
                                 if (!campaign) continue;
 
-                                // Recalculate all stats from messages table
-                                await Campaign.calculateStatsFromMessages(campaign.id);
+                                if (campaign.length) {
+                                    await Campaign.calculateStatsFromMessages(campaign[0].campaign_id);
+                                }
                             } catch (error) {
                                 console.error('Error processing status update:', error);
                             }
+                        }
+                    }
+
+                    // Process incoming messages
+                    if (change.value.messages) {
+                        if (!wss) {
+                            console.error('WebSocket server instance not found in app');
+                            // Continue processing without WebSocket
+                        } else {
+                            console.log('WebSocket server instance found, processing message...');
+                            await WhatsAppService.processIncomingMessage([item], wss);
                         }
                     }
                 }
@@ -395,7 +508,6 @@ class MessageController {
             console.error('Webhook processing error:', error);
         }
     }
-
     static async processMessageStatus(status) {
         const connection = await pool.getConnection();
         try {
@@ -464,14 +576,14 @@ class MessageController {
             connection.release();
         }
     }
-    static async updateMessageStatus(messageId, newStatus) {
+    static async updateMessageStatus(messageId, newStatus, whatsappStatus) {
         const connection = await pool.getConnection();
         try {
             await connection.execute(
                 `UPDATE messages SET 
-                status = ?, 
+                status = ?, whatsapp_status =?,
                 updated_at = NOW() 
-             WHERE id = ?`, [newStatus, messageId]
+             WHERE id = ?`, [newStatus, whatsappStatus, messageId]
             );
             await MessageController.recordStatusChange(messageId, newStatus);
         } catch (err) {

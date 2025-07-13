@@ -92,8 +92,8 @@ class BusinessController {
             }
 
             const absoluteUrl = `${req.protocol}://${req.get('host')}${filePath}`;
-
-            // Update database
+            console.log("userid", req.user.id)
+                // Update database
             const updatedBusiness = await Business.updateProfileImage(req.user.id, absoluteUrl);
 
             return res.json({
