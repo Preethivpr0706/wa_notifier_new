@@ -482,10 +482,8 @@ class MessageController {
                                 // Get campaign for this message
                                 const campaign = await Campaign.getByMessageId(messageId);
                                 if (!campaign) continue;
-
-                                if (campaign.length) {
-                                    await Campaign.calculateStatsFromMessages(campaign[0].campaign_id);
-                                }
+                                // Recalculate all stats from messages table
+                                await Campaign.calculateStatsFromMessages(campaign.id);
                             } catch (error) {
                                 console.error('Error processing status update:', error);
                             }

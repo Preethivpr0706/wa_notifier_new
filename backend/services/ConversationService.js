@@ -5,7 +5,7 @@ const { pool } = require('../config/database');
 const ConversationController = require('../controllers/conversationController')
 
 class ConversationService {
-    static async sendMessage({ to, businessId, messageType, content }) {
+    static async sendMessage({ to, businessId, messageType, content, mediaId, filename, caption }) {
         try {
             // Get business settings
             const [settings] = await pool.query(
@@ -24,15 +24,58 @@ class ConversationService {
                 }
             };
 
-            const payload = {
+            let payload = {
                 messaging_product: 'whatsapp',
                 recipient_type: 'individual',
                 to: to,
-                type: 'text',
-                text: {
-                    body: content
-                }
+                type: messageType
             };
+
+            // Handle different message types
+            switch (messageType) {
+                case 'text':
+                    payload.text = {
+                        body: content
+                    };
+                    break;
+
+                case 'document':
+                    payload.document = {
+                        id: mediaId,
+                        filename: filename
+                    };
+                    if (caption) {
+                        payload.document.caption = caption;
+                    }
+                    break;
+
+                case 'image':
+                    payload.image = {
+                        id: mediaId
+                    };
+                    if (caption) {
+                        payload.image.caption = caption;
+                    }
+                    break;
+
+                case 'video':
+                    payload.video = {
+                        id: mediaId
+                    };
+                    if (caption) {
+                        payload.video.caption = caption;
+                    }
+                    break;
+
+                case 'audio':
+                    payload.audio = {
+                        id: mediaId
+                    };
+                    break;
+
+                default:
+                    throw new Error(`Unsupported message type: ${messageType}`);
+            }
 
             const response = await axios.post(
                 `https://graph.facebook.com/v17.0/${settings[0].whatsapp_phone_number_id}/messages`,
@@ -79,12 +122,35 @@ class ConversationService {
                 for (const change of item.changes) {
                     if (change.value.messages) {
                         for (const message of change.value.messages) {
+                            let content = '';
+
+                            // Handle different message types for incoming messages
+                            switch (message.type) {
+                                case 'text':
+                                    content = message.text.body;
+                                    break;
+                                case 'document':
+                                    content = message.document.filename || 'Document';
+                                    break;
+                                case 'image':
+                                    content = message.image.caption || 'Image';
+                                    break;
+                                case 'video':
+                                    content = message.video.caption || 'Video';
+                                    break;
+                                case 'audio':
+                                    content = 'Audio message';
+                                    break;
+                                default:
+                                    content = `${message.type} message`;
+                            }
+
                             await ConversationController.addIncomingMessage({
                                 businessId,
                                 phoneNumber: message.from,
                                 whatsappMessageId: message.id,
                                 messageType: message.type,
-                                content: message.text ? message.text.body : '',
+                                content: content,
                                 timestamp: message.timestamp
                             }, wss);
                         }
@@ -98,7 +164,5 @@ class ConversationService {
     }
 
 }
-
-
 
 module.exports = ConversationService;

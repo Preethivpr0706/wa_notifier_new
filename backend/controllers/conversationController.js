@@ -1,6 +1,6 @@
 const { pool } = require('../config/database');
 const { v4: uuidv4 } = require('uuid');
-const ConversationService = require('../services/ConversationService');
+const ConversationService = require('../services/conversationService');
 
 class ConversationController {
     static async getOrCreateConversation(businessId, phoneNumber) {

@@ -279,8 +279,8 @@ class WhatsAppService {
             if (!whatsappApiUrl || !whatsappApiToken || !businessId) {
                 throw new Error('WhatsApp API configuration is missing');
             }
-
-            // Check template status in WhatsApp
+            console.log(template)
+                // Check template status in WhatsApp
             const response = await axios.get(
                 `${whatsappApiUrl}/${businessId}/message_templates?name=${template.name}`, {
                     headers: {
@@ -289,7 +289,7 @@ class WhatsAppService {
                     }
                 }
             );
-
+            console.log(response)
             if (response.data.data && response.data.data.length > 0) {
                 const whatsappTemplate = response.data.data[0];
                 console.log(whatsappTemplate);

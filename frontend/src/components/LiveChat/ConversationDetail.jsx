@@ -9,6 +9,27 @@ import './ConversationDetail.css';
 const MessageBubble = ({ message, isConsecutive = false }) => {
   const isOutbound = message.direction === 'outbound';
   
+  const getFileTypeIcon = (filename) => {
+    const ext = filename.split('.').pop().toLowerCase();
+    switch(ext) {
+      case 'pdf':
+        return '📄';
+      case 'doc':
+      case 'docx':
+        return '📝';
+      case 'xls':
+      case 'xlsx':
+        return '📊';
+      case 'ppt':
+      case 'pptx':
+        return '📑';
+      case 'txt':
+        return '📄';
+      default:
+        return '📎';
+    }
+  };
+
   const StatusIcon = ({ status }) => {
     switch (status) {
       case 'delivered':
@@ -59,6 +80,14 @@ const MessageBubble = ({ message, isConsecutive = false }) => {
     }
   };
 
+  const formatFileSize = (bytes) => {
+    if (!bytes) return '';
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+    return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)} GB`;
+  };
+
   return (
     <div className={`message-bubble ${isOutbound ? 'outbound' : 'inbound'} ${isConsecutive ? 'consecutive' : ''}`}>
       <div className="message-content">
@@ -69,10 +98,22 @@ const MessageBubble = ({ message, isConsecutive = false }) => {
             <img src={message.media_url} alt={message.content} />
           </div>
         )}
+        
         {message.message_type === 'document' && (
           <div className="message-document">
-            <a href={message.media_url} target="_blank" rel="noopener noreferrer">
-              📄 {message.media_filename || 'Download file'}
+            <a 
+              href={message.media_url} 
+              target="_blank" 
+              rel="noopener noreferrer"
+              className="document-link"
+            >
+              <div className="document-icon">
+                {getFileTypeIcon(message.media_filename || message.content)}
+              </div>
+              <div className="document-info">
+                <div className="document-name">{message.media_filename || message.content}</div>
+                <div className="document-size">{formatFileSize(message.file_size)}</div>
+              </div>
             </a>
           </div>
         )}
@@ -98,10 +139,18 @@ const ConversationDetail = () => {
   const [isTyping, setIsTyping] = useState(false);
   const messagesEndRef = useRef(null);
   const typingTimeoutRef = useRef(null);
-  const processedMessageIds = useRef(new Set());
+  const fileInputRef = useRef(null);
 
   const user = authService.getCurrentUser();
-  const { notifications, sendMessage, isConnected, reconnect } = useChatWebSocket();
+  const { notifications, sendMessage, isConnected, reconnect, clearNotifications } = useChatWebSocket();
+
+  // Simple message deduplication using a Set of message identifiers
+  const getMessageIdentifier = (message) => {
+    return message.id || 
+           message.whatsapp_message_id || 
+           message.whatsapp_media_id || 
+           `${message.conversation_id}-${message.timestamp}-${message.content}`;
+  };
 
   const fetchConversation = useCallback(async () => {
     try {
@@ -113,12 +162,6 @@ const ConversationDetail = () => {
       
       setConversation(convResponse.data);
       setMessages(messagesResponse.data);
-      
-      // Track existing message IDs - both regular id and whatsapp_message_id
-      messagesResponse.data.forEach(msg => {
-        if (msg.id) processedMessageIds.current.add(msg.id);
-        if (msg.whatsapp_message_id) processedMessageIds.current.add(msg.whatsapp_message_id);
-      });
       
     } catch (error) {
       console.error('Error loading conversation:', error);
@@ -132,51 +175,50 @@ const ConversationDetail = () => {
 
     try {
       setSending(true);
-      const tempId = `temp-${Date.now()}`;
-      const tempMessage = {
-        id: tempId,
-        conversation_id: id,
-        direction: 'outbound',
-        message_type: 'text',
-        content: newMessage,
-        status: 'sending',
-        timestamp: new Date().toISOString()
-      };
-
-      // Add to UI immediately
-      setMessages(prev => [...prev, tempMessage]);
       const messageContent = newMessage;
       setNewMessage('');
 
       // Send typing false
       sendMessage({ type: 'typing', conversationId: id, isTyping: false });
 
-      const response = await conversationService.sendMessage(id, {
+      // Send message directly without adding to UI first
+      await conversationService.sendMessage(id, {
         messageType: 'text',
         content: messageContent
       });
 
-      // Update with real data
-      setMessages(prev => prev.map(msg => 
-        msg.id === tempId ? { 
-          ...msg, 
-          id: response.data.messageId,
-          whatsapp_message_id: response.data.whatsappMessageId,
-          status: 'sent'
-        } : msg
-      ));
-
-      // Track the new message ID
-      processedMessageIds.current.add(response.data.messageId);
-      if (response.data.whatsappMessageId) {
-        processedMessageIds.current.add(response.data.whatsappMessageId);
-      }
+      // WebSocket will handle adding the message to UI
 
     } catch (error) {
       console.error('Error sending message:', error);
-      setMessages(prev => prev.map(msg => 
-        msg.id.startsWith('temp-') ? { ...msg, status: 'failed' } : msg
-      ));
+      // Show error message or retry option
+    } finally {
+      setSending(false);
+    }
+  };
+
+  const handleFileChange = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    try {
+      setSending(true);
+      
+      // Upload the file
+      const uploadResponse = await conversationService.uploadFile(file);
+      
+      // Send the file message
+      await conversationService.sendFileMessage(
+        id, 
+        uploadResponse.id,
+        file.name
+      );
+      
+      // WebSocket will handle adding the message to UI
+      
+    } catch (error) {
+      console.error('Error sending file:', error);
+      // Show error message or retry option
     } finally {
       setSending(false);
     }
@@ -189,7 +231,6 @@ const ConversationDetail = () => {
     }
   };
 
-  // Handle typing indicator
   const handleTyping = useCallback((isTypingNow) => {
     if (typingTimeoutRef.current) {
       clearTimeout(typingTimeoutRef.current);
@@ -208,110 +249,57 @@ const ConversationDetail = () => {
     navigate('/conversations');
   };
 
+  const handleAttachClick = () => {
+    fileInputRef.current.click();
+  };
+
   // Initialize conversation
   useEffect(() => {
     fetchConversation();
   }, [fetchConversation]);
 
-  // Handle WebSocket notifications
+  // Handle WebSocket notifications - simplified
   useEffect(() => {
     if (!notifications.length) return;
 
     console.log('Processing notifications:', notifications);
 
     notifications.forEach(notification => {
-      console.log('Processing notification:', notification);
-      
       switch (notification.type) {
         case 'new_message':
-          // Only process if it's for this conversation
           if (notification.conversationId !== id) return;
           
-          const message = notification.message;
-          console.log('New message received:', message);
+          const newMessage = notification.message;
+          console.log('Adding new message:', newMessage);
           
-          // Check if we've already processed this message
-          const messageId = message.id || message.whatsapp_message_id;
-          if (messageId && processedMessageIds.current.has(messageId)) {
-            console.log('Message already processed, skipping');
-            return;
-          }
-
-          // Only add inbound messages (outbound are handled by sendMessage)
-          if (message.direction === 'inbound') {
-            setMessages(prev => {
-              const exists = prev.some(msg => 
-                msg.id === message.id || 
-                msg.whatsapp_message_id === message.whatsapp_message_id ||
-                (msg.id && message.id && msg.id === message.id)
-              );
-              
-              if (!exists) {
-                console.log('Adding new inbound message');
-                // Track the message ID
-                if (message.id) processedMessageIds.current.add(message.id);
-                if (message.whatsapp_message_id) processedMessageIds.current.add(message.whatsapp_message_id);
-                
-                return [...prev, message];
-              }
-              return prev;
-            });
-          }
-          break;
-
-        case 'message_status':
-          console.log('Message status update:', notification);
-          
-          // Update message status - check both id and whatsapp_message_id
           setMessages(prev => {
-            const updated = prev.map(msg => {
-              // Check if this message matches the status update
-              const matches = 
-                msg.id === notification.messageId || 
-                msg.whatsapp_message_id === notification.messageId ||
-                (msg.id && notification.messageId && msg.id.toString() === notification.messageId.toString()) ||
-                (msg.whatsapp_message_id && notification.messageId && msg.whatsapp_message_id.toString() === notification.messageId.toString());
-              
-              if (matches) {
-                console.log(`Updating message ${msg.id} status from ${msg.status} to ${notification.status}`);
-                return { ...msg, status: notification.status };
-              }
-              return msg;
-            });
+            // Simple deduplication - check if message already exists
+            const messageId = getMessageIdentifier(newMessage);
+            const exists = prev.some(msg => getMessageIdentifier(msg) === messageId);
             
-            // Check if any message was actually updated
-            const wasUpdated = updated.some((msg, index) => 
-              msg.status !== prev[index].status
-            );
-            
-            if (wasUpdated) {
-              console.log('Message status updated successfully');
-            } else {
-              console.log(`No message found with ID: ${notification.messageId}`);
-              console.log('Available message IDs:', prev.map(m => ({ id: m.id, whatsapp_id: m.whatsapp_message_id })));
+            if (!exists) {
+              return [...prev, newMessage];
             }
-            
-            return updated;
+            return prev;
           });
           break;
-
-        case 'typing':
-          // Only process if it's for this conversation
-          if (notification.conversationId !== id) return;
           
-          console.log('Typing status:', notification.isTyping);
-          setIsTyping(notification.isTyping);
+        case 'message_status':
+          setMessages(prev => prev.map(msg => {
+            const matches = 
+              msg.id === notification.messageId || 
+              msg.whatsapp_message_id === notification.messageId ||
+              msg.whatsapp_media_id === notification.messageId;
+            
+            return matches ? { ...msg, status: notification.status } : msg;
+          }));
           break;
-
-        case 'new_conversation':
-          // This would be handled in the conversation list
-          break;
-
-        default:
-          console.log('Unknown notification type:', notification.type);
       }
     });
-  }, [notifications, id]);
+
+    // Clear notifications after processing
+    clearNotifications();
+  }, [notifications, id, clearNotifications]);
 
   // Auto-scroll to bottom
   useEffect(() => {
@@ -386,7 +374,6 @@ const ConversationDetail = () => {
                   <span className="closed">Closed</span>
                 )}
                 {isTyping && <span className="typing-indicator">typing...</span>}
-                
               </p>
             </div>
           </div>
@@ -416,11 +403,11 @@ const ConversationDetail = () => {
               const prevMessage = messages[index - 1];
               const isConsecutive = prevMessage && 
                 prevMessage.direction === message.direction &&
-                new Date(message.timestamp) - new Date(prevMessage.timestamp) < 300000; // 5 minutes
+                new Date(message.timestamp) - new Date(prevMessage.timestamp) < 300000;
 
               return (
                 <MessageBubble 
-                  key={message.id || message.whatsapp_message_id} 
+                  key={getMessageIdentifier(message)} 
                   message={message} 
                   isConsecutive={isConsecutive}
                 />
@@ -446,7 +433,18 @@ const ConversationDetail = () => {
               className="message-textarea"
               disabled={!isConnected}
             />
-            <button className="input-action-btn attachment-btn">
+            <input 
+              type="file" 
+              ref={fileInputRef} 
+              onChange={handleFileChange}
+              style={{ display: 'none' }}
+              accept="image/*,application/pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt"
+            />
+            
+            <button 
+              className="input-action-btn attachment-btn"
+              onClick={handleAttachClick}
+            >
               <Paperclip size={20} />
             </button>
           </div>

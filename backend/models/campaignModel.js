@@ -327,6 +327,7 @@ class Campaign {
                 }
 
                 const stats = messageStats[0];
+                console.log("stats  ", stats)
 
                 // Update campaign with these counts
                 await connection.execute(

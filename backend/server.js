@@ -18,6 +18,8 @@ const dashboardRoutes = require('./routes/dashboardRoutes');
 const Message = require('./controllers/messageController');
 const SchedulerService = require('./services/schedulerService');
 const WSServer = require('./webSocket/wsSocket');
+const fileRoutes = require('./routes/fileRoutes');
+
 
 require('dotenv').config();
 
@@ -58,6 +60,8 @@ app.use('/api/business', authenticate, businessRoutes);
 app.use('/api/redirect', redirectRoutes);
 app.use('/api/dashboard', authenticate, dashboardRoutes);
 app.use('/api/conversations', authenticate, conversationRoutes);
+app.use('/api/files', authenticate, fileRoutes);
+
 
 // Scheduled tasks
 setInterval(async() => {
@@ -142,7 +146,16 @@ app.use((req, res, next) => {
         message: 'Route not found'
     });
 });
+const requiredDirs = [
+    path.join(__dirname, 'public/uploads'),
+    path.join(__dirname, 'public/uploads/temp')
+];
 
+requiredDirs.forEach(dir => {
+    if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir, { recursive: true });
+    }
+});
 // Start server with WebSocket support
 const PORT = process.env.PORT || 5000;
 server.listen(PORT, () => {

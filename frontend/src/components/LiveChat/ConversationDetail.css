@@ -380,3 +380,82 @@
         padding: 12px 4% 12px 3%;
     }
 }
+
+
+/* Document message styles */
+
+.message-document {
+    background: #ffffff;
+    border-radius: 8px;
+    padding: 12px;
+    max-width: 300px;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+}
+
+.document-link {
+    display: flex;
+    text-decoration: none;
+    color: inherit;
+    align-items: center;
+    gap: 12px;
+}
+
+.document-icon {
+    font-size: 28px;
+    flex-shrink: 0;
+}
+
+.document-info {
+    flex-grow: 1;
+    overflow: hidden;
+}
+
+.document-name {
+    font-weight: 500;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    margin-bottom: 4px;
+}
+
+.document-size {
+    font-size: 12px;
+    color: #666;
+}
+
+.outbound .message-document {
+    background: #d9fdd3;
+}
+
+
+/* File input button styling */
+
+.input-action-btn.attachment-btn {
+    position: relative;
+}
+
+.input-action-btn.attachment-btn input[type="file"] {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    opacity: 0;
+    cursor: pointer;
+}
+
+.message-document-preview {
+    margin-top: 8px;
+    max-height: 200px;
+    overflow: hidden;
+    border-radius: 4px;
+}
+
+
+/* For PDF preview (would need PDF.js or similar for actual preview) */
+
+.message-document-preview.pdf {
+    background: #f5f5f5;
+    padding: 8px;
+    text-align: center;
+}

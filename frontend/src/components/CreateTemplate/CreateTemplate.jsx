@@ -1056,6 +1056,7 @@ const uploadFile = async (file) => {
                     <option value="es_ES">Spanish (Spain)</option>
                     <option value="fr_FR">French (France)</option>
                     <option value="pt_BR">Portuguese (Brazil)</option>
+                    <option value="ta">Tamil</option>
                   </select>
                 </div>
               </div>

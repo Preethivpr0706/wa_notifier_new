@@ -8,6 +8,7 @@ export const useChatWebSocket = () => {
   const [reconnectAttempts, setReconnectAttempts] = useState(0);
   const reconnectTimeoutRef = useRef(null);
   const isConnectingRef = useRef(false);
+  const processedNotificationIds = useRef(new Set());
   const maxReconnectAttempts = 5;
 
   const getBusinessId = () => {
@@ -80,6 +81,8 @@ export const useChatWebSocket = () => {
         setIsConnected(true);
         setReconnectAttempts(0);
         isConnectingRef.current = false;
+        // Clear processed notifications on reconnect
+        processedNotificationIds.current.clear();
       };
 
       wsRef.current.onmessage = (event) => {
@@ -87,10 +90,21 @@ export const useChatWebSocket = () => {
           const message = JSON.parse(event.data);
           console.log('WebSocket message received:', message);
           
-          // Add unique ID to notifications if not present
-          if (!message.id) {
-            message.id = `${message.type}-${Date.now()}-${Math.random()}`;
+          // Create a unique ID for this notification
+          const notificationId = message.id || 
+            `${message.type}-${message.conversationId || ''}-${message.messageId || message.message?.id || Date.now()}-${Math.random()}`;
+          
+          // Check if we've already processed this notification
+          if (processedNotificationIds.current.has(notificationId)) {
+            console.log('Duplicate notification ignored:', notificationId);
+            return;
           }
+          
+          // Add to processed set
+          processedNotificationIds.current.add(notificationId);
+          
+          // Add unique ID to the message
+          message.id = notificationId;
           
           setNotifications(prev => {
             // For status updates, replace existing notifications with same messageId
@@ -101,10 +115,7 @@ export const useChatWebSocket = () => {
               return [...filtered, message];
             }
             
-            // For other notifications, avoid duplicates
-            const exists = prev.some(n => n.id === message.id);
-            if (exists) return prev;
-            
+            // For new messages, just add if not duplicate
             return [...prev, message];
           });
         } catch (error) {
@@ -172,17 +183,26 @@ export const useChatWebSocket = () => {
 
   const clearNotifications = useCallback(() => {
     setNotifications([]);
+    processedNotificationIds.current.clear();
   }, []);
 
-  // Clear old notifications automatically (optional)
+  // Clear old notifications automatically
   useEffect(() => {
     const cleanup = setInterval(() => {
       setNotifications(prev => {
         const now = Date.now();
-        return prev.filter(n => {
+        const filtered = prev.filter(n => {
           const notificationTime = new Date(n.timestamp || now).getTime();
           return now - notificationTime < 300000; // Keep notifications for 5 minutes
         });
+        
+        // If we removed notifications, also clean up the processed IDs
+        if (filtered.length !== prev.length) {
+          const remainingIds = new Set(filtered.map(n => n.id));
+          processedNotificationIds.current = remainingIds;
+        }
+        
+        return filtered;
       });
     }, 60000); // Check every minute
 
@@ -194,6 +214,7 @@ export const useChatWebSocket = () => {
     
     // Reset state
     setReconnectAttempts(0);
+    processedNotificationIds.current.clear();
     
     // Clear any existing timeout
     if (reconnectTimeoutRef.current) {

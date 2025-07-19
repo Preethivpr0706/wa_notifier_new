@@ -1,6 +1,27 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Search, Eye, Edit, Trash, AlertCircle, Clock, RefreshCw, ExternalLink, Phone, ChevronLeft, ChevronRight } from 'lucide-react';
+import { 
+  Plus, 
+  Search, 
+  Eye, 
+  Edit, 
+  Trash, 
+  AlertCircle, 
+  Clock, 
+  RefreshCw, 
+  ExternalLink, 
+  Phone, 
+  ChevronLeft, 
+  ChevronRight,
+  FileText,
+  Image,
+  FileVideo,
+  File,
+  ArrowUpDown,
+  Filter,
+  MoreHorizontal,
+  X
+} from 'lucide-react';
 import { templateService } from '../../api/templateService';
 import './MessageTemplates.css';
 
@@ -9,26 +30,33 @@ function MessageTemplates() {
   const [templates, setTemplates] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [activeFilter, setActiveFilter] = useState('all');
+  const [activeFilters, setActiveFilters] = useState({
+    status: 'all',
+    category: 'all',
+    headerType: 'all'
+  });
   const [searchQuery, setSearchQuery] = useState('');
   const [deleteConfirm, setDeleteConfirm] = useState(null);
   const [selectedTemplate, setSelectedTemplate] = useState(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [templateToDelete, setTemplateToDelete] = useState(null);
   const [isCheckingStatus, setIsCheckingStatus] = useState(false);
+  const [sortConfig, setSortConfig] = useState({ key: 'created_at', direction: 'desc' });
+  const [selectedTemplates, setSelectedTemplates] = useState([]);
+  const [showFilters, setShowFilters] = useState(false);
   
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
-  const [itemsPerPage] = useState(12); // Show 12 templates per page
+  const [itemsPerPage] = useState(15);
   const [totalPages, setTotalPages] = useState(1);
 
   useEffect(() => {
     fetchTemplates();
-  }, [activeFilter, currentPage]);
+  }, [activeFilters, currentPage]);
 
   useEffect(() => {
-    setCurrentPage(1); // Reset to first page when filter changes
-  }, [activeFilter, searchQuery]);
+    setCurrentPage(1);
+  }, [activeFilters, searchQuery]);
 
   const fetchTemplates = async () => {
     try {
@@ -36,12 +64,14 @@ function MessageTemplates() {
       setError(null);
       
       const filters = {};
-      if (activeFilter !== 'all') {
-        if (['marketing', 'utility'].includes(activeFilter)) {
-          filters.category = activeFilter;
-        } else if (['approved', 'pending', 'rejected', 'draft'].includes(activeFilter)) {
-          filters.status = activeFilter;
-        }
+      if (activeFilters.status !== 'all') {
+        filters.status = activeFilters.status;
+      }
+      if (activeFilters.category !== 'all') {
+        filters.category = activeFilters.category;
+      }
+      if (activeFilters.headerType !== 'all') {
+        filters.header_type = activeFilters.headerType;
       }
       
       const response = await templateService.getTemplates(filters);
@@ -55,12 +85,22 @@ function MessageTemplates() {
     }
   };
 
-  const handleFilterChange = (filter) => {
-    setActiveFilter(filter);
+  const handleFilterChange = (filterType, value) => {
+    setActiveFilters(prev => ({
+      ...prev,
+      [filterType]: value
+    }));
   };
 
   const handleSearchChange = (e) => {
     setSearchQuery(e.target.value);
+  };
+
+  const handleSort = (key) => {
+    setSortConfig(prev => ({
+      key,
+      direction: prev.key === key && prev.direction === 'desc' ? 'asc' : 'desc'
+    }));
   };
 
   const handleCreateTemplate = () => {
@@ -107,19 +147,6 @@ function MessageTemplates() {
     try {
       setIsDeleting(true);
       setError(null);
-      
-      if (templateToDelete?.status === 'draft') {
-        const response = await templateService.deleteTemplate(deleteConfirm);
-        
-        if (response.success) {
-          setTemplates(templates.filter(t => t.id !== deleteConfirm));
-          setDeleteConfirm(null);
-          setTemplateToDelete(null);
-        } else {
-          setError(response.message || 'Failed to delete template');
-        }
-        return;
-      }
       
       const response = await templateService.deleteTemplate(deleteConfirm);
       
@@ -169,30 +196,72 @@ function MessageTemplates() {
     }
   };
 
-  useEffect(() => {
-    let pollingInterval;
-    
-    if (templates.some(template => template.status === 'pending')) {
-      pollingInterval = setInterval(() => {
-        fetchTemplates();
-      }, 30000);
+  const handleSelectTemplate = (templateId) => {
+    setSelectedTemplates(prev => 
+      prev.includes(templateId) 
+        ? prev.filter(id => id !== templateId)
+        : [...prev, templateId]
+    );
+  };
+
+  const handleSelectAll = () => {
+    if (selectedTemplates.length === paginatedTemplates.length) {
+      setSelectedTemplates([]);
+    } else {
+      setSelectedTemplates(paginatedTemplates.map(t => t.id));
     }
+  };
 
-    return () => {
-      if (pollingInterval) {
-        clearInterval(pollingInterval);
-      }
-    };
-  }, [templates]);
+  const clearFilters = () => {
+    setActiveFilters({
+      status: 'all',
+      category: 'all',
+      headerType: 'all'
+    });
+    setSearchQuery('');
+  };
 
-  // Filter and paginate templates
+  const getActiveFilterCount = () => {
+    let count = 0;
+    if (activeFilters.status !== 'all') count++;
+    if (activeFilters.category !== 'all') count++;
+    if (activeFilters.headerType !== 'all') count++;
+    if (searchQuery) count++;
+    return count;
+  };
+
+  // Filter and sort templates
   const filteredTemplates = templates.filter((template) => {
-    const matchesSearch = template.name.toLowerCase().includes(searchQuery.toLowerCase());
-    return matchesSearch;
+    const matchesSearch = template.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                         template.body_text?.toLowerCase().includes(searchQuery.toLowerCase());
+    
+    // Apply header type filter
+    const matchesHeaderType = activeFilters.headerType === 'all' || 
+                             template.header_type === activeFilters.headerType ||
+                             (activeFilters.headerType === 'none' && !template.header_type);
+    
+    return matchesSearch && matchesHeaderType;
+  });
+
+  const sortedTemplates = [...filteredTemplates].sort((a, b) => {
+    if (sortConfig.key === 'created_at') {
+      const aDate = new Date(a.created_at);
+      const bDate = new Date(b.created_at);
+      return sortConfig.direction === 'asc' ? aDate - bDate : bDate - aDate;
+    }
+    
+    const aValue = a[sortConfig.key]?.toString().toLowerCase() || '';
+    const bValue = b[sortConfig.key]?.toString().toLowerCase() || '';
+    
+    if (sortConfig.direction === 'asc') {
+      return aValue.localeCompare(bValue);
+    } else {
+      return bValue.localeCompare(aValue);
+    }
   });
 
   // Calculate pagination
-  const totalFilteredTemplates = filteredTemplates.length;
+  const totalFilteredTemplates = sortedTemplates.length;
   const calculatedTotalPages = Math.ceil(totalFilteredTemplates / itemsPerPage);
   
   useEffect(() => {
@@ -201,7 +270,7 @@ function MessageTemplates() {
 
   const startIndex = (currentPage - 1) * itemsPerPage;
   const endIndex = startIndex + itemsPerPage;
-  const paginatedTemplates = filteredTemplates.slice(startIndex, endIndex);
+  const paginatedTemplates = sortedTemplates.slice(startIndex, endIndex);
 
   const handlePageChange = (newPage) => {
     if (newPage >= 1 && newPage <= totalPages) {
@@ -218,6 +287,31 @@ function MessageTemplates() {
     return labels[category] || category;
   };
 
+  const getHeaderTypeIcon = (headerType) => {
+    switch (headerType) {
+      case 'text':
+        return <FileText size={16} />;
+      case 'image':
+        return <Image size={16} />;
+      case 'document':
+        return <File size={16} />;
+      case 'video':
+        return <FileVideo size={16} />;
+      default:
+        return <FileText size={16} />;
+    }
+  };
+
+  const getHeaderTypeLabel = (headerType) => {
+    const labels = {
+      text: 'Text',
+      image: 'Image',
+      document: 'Document',
+      video: 'Video'
+    };
+    return labels[headerType] || 'None';
+  };
+
   const getStatusClass = (status) => {
     const statusClasses = {
       approved: 'message-templates__status--approved',
@@ -229,29 +323,28 @@ function MessageTemplates() {
   };
 
   const formatDate = (dateString) => {
-    const templateDate = new Date(dateString);
-    const now = new Date();
-    
-    const templateDay = new Date(Date.UTC(
-        templateDate.getUTCFullYear(), 
-        templateDate.getUTCMonth(), 
-        templateDate.getUTCDate()
-    ));
-    
-    const today = new Date(Date.UTC(
-        now.getUTCFullYear(), 
-        now.getUTCMonth(), 
-        now.getUTCDate()
-    ));
-    
-    const diffDays = Math.floor((today - templateDay) / (1000 * 60 * 60 * 24));
-    
-    if (diffDays === 0) return 'Today';
-    if (diffDays === 1) return 'Yesterday';
-    if (diffDays < 7) return `${diffDays} days ago`;
-    if (diffDays < 30) return `${Math.floor(diffDays / 7)} weeks ago`;
-    if (diffDays < 365) return `${Math.floor(diffDays / 30)} months ago`;
-    return `${Math.floor(diffDays / 365)} years ago`;
+    const date = new Date(dateString);
+    return date.toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric'
+    });
+  };
+
+  const formatDateTime = (dateString) => {
+    const date = new Date(dateString);
+    return date.toLocaleString('en-US', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+  };
+
+  const truncateText = (text, maxLength = 100) => {
+    if (!text) return '';
+    return text.length > maxLength ? text.substring(0, maxLength) + '...' : text;
   };
 
   const renderHeaderContent = (template) => {
@@ -274,7 +367,7 @@ function MessageTemplates() {
         return (
           <div className="message-templates__header-document">
             <div className="message-templates__document-icon">📄</div>
-            <div className="message-templates__document-name">{'Document.pdf'}</div>
+            <div className="message-templates__document-name">Document.pdf</div>
           </div>
         );
       case 'video':
@@ -474,34 +567,84 @@ function MessageTemplates() {
           <Search size={18} className="message-templates__search-icon" />
           <input
             type="text"
-            placeholder="Search templates by name..."
+            placeholder="Search templates by name or content..."
             value={searchQuery}
             onChange={handleSearchChange}
             className="message-templates__search-input"
           />
         </div>
         
-        <div className="message-templates__filter-tabs">
-          {[
-            { key: 'all', label: 'All Templates' },
-            { key: 'marketing', label: 'Marketing' },
-            { key: 'utility', label: 'Utility' },
-            { key: 'approved', label: 'Approved' },
-            { key: 'pending', label: 'Pending' },
-            { key: 'draft', label: 'Draft' }
-          ].map(filter => (
+        <div className="message-templates__filter-controls">
+          <button 
+            className={`message-templates__filter-toggle ${showFilters ? 'active' : ''}`}
+            onClick={() => setShowFilters(!showFilters)}
+          >
+            <Filter size={16} />
+            Filters
+            {getActiveFilterCount() > 0 && (
+              <span className="message-templates__filter-count">{getActiveFilterCount()}</span>
+            )}
+          </button>
+          
+          {getActiveFilterCount() > 0 && (
             <button 
-              key={filter.key}
-              className={`message-templates__filter-tab ${
-                activeFilter === filter.key ? 'message-templates__filter-tab--active' : ''
-              }`}
-              onClick={() => handleFilterChange(filter.key)}
+              className="message-templates__clear-filters"
+              onClick={clearFilters}
             >
-              {filter.label}
+              <X size={16} />
+              Clear All
             </button>
-          ))}
+          )}
         </div>
       </div>
+
+      {showFilters && (
+        <div className="message-templates__filters-panel">
+          <div className="message-templates__filter-group">
+            <label className="message-templates__filter-label">Status</label>
+            <select 
+              value={activeFilters.status} 
+              onChange={(e) => handleFilterChange('status', e.target.value)}
+              className="message-templates__filter-select"
+            >
+              <option value="all">All Status</option>
+              <option value="approved">Approved</option>
+              <option value="pending">Pending</option>
+              <option value="rejected">Rejected</option>
+              <option value="draft">Draft</option>
+            </select>
+          </div>
+          
+          <div className="message-templates__filter-group">
+            <label className="message-templates__filter-label">Category</label>
+            <select 
+              value={activeFilters.category} 
+              onChange={(e) => handleFilterChange('category', e.target.value)}
+              className="message-templates__filter-select"
+            >
+              <option value="all">All Categories</option>
+              <option value="marketing">Marketing</option>
+              <option value="utility">Utility</option>
+            </select>
+          </div>
+          
+          <div className="message-templates__filter-group">
+            <label className="message-templates__filter-label">Header Type</label>
+            <select 
+              value={activeFilters.headerType} 
+              onChange={(e) => handleFilterChange('headerType', e.target.value)}
+              className="message-templates__filter-select"
+            >
+              <option value="all">All Header Types</option>
+              <option value="none">No Header</option>
+              <option value="text">Text Header</option>
+              <option value="image">Image Header</option>
+              <option value="document">Document Header</option>
+              <option value="video">Video Header</option>
+            </select>
+          </div>
+        </div>
+      )}
 
       {isLoading ? (
         <div className="message-templates__loading-state">
@@ -513,12 +656,12 @@ function MessageTemplates() {
           <AlertCircle size={48} className="message-templates__empty-icon" />
           <h3 className="message-templates__empty-title">No templates found</h3>
           <p className="message-templates__empty-description">
-            {searchQuery || activeFilter !== 'all' 
+            {searchQuery || getActiveFilterCount() > 0
               ? 'Try adjusting your search or filter settings' 
               : 'Get started by creating your first message template'
             }
           </p>
-          {!searchQuery && activeFilter === 'all' && (
+          {!searchQuery && getActiveFilterCount() === 0 && (
             <button onClick={handleCreateTemplate} className="message-templates__empty-action-btn">
               <Plus size={16} />
               Create Your First Template
@@ -526,100 +669,213 @@ function MessageTemplates() {
           )}
         </div>
       ) : (
-        <>
-          <div className="message-templates__grid">
-            {paginatedTemplates.map((template) => (
-              <div key={template.id} className="message-templates__card">
-                <div className="message-templates__card-header">
-                  <div className="message-templates__category-badge">
-                    {getCategoryLabel(template.category)}
-                  </div>
-                 
-                  <div className="message-templates__status-container">
-                    <div className={`message-templates__status ${getStatusClass(template.status)}`}>
-                      {template.status}
-                    </div>
-                    {template.status === 'pending' && (
-                      <button 
-                        className="message-templates__status-refresh-btn" 
-                        onClick={() => handleCheckStatus(template.id)}
-                        title="Check status"
-                        disabled={isCheckingStatus}
-                      >
-                        <RefreshCw size={14} className={isCheckingStatus ? "message-templates__spinning" : ""} />
-                      </button>
-                    )}
-                  </div>
-                </div>
-                
-                <h3 className="message-templates__card-title">{template.name}</h3>
-                
-                <div className="message-templates__card-preview">
-                  {renderTemplateContent(template)}
-                </div>
-                
-                {template.status === 'rejected' && template.rejection_reason && (
-                  <div className="message-templates__rejection-reason">
-                    <AlertCircle size={14} />
-                    <span>Reason: {template.rejection_reason}</span>
-                  </div>
-                )}
-                
-                <div className="message-templates__card-info">
-                  <div className="message-templates__info-item">
-                    <span className="message-templates__info-label">Language:</span>
-                    <span className="message-templates__info-value">{template.language}</span>
-                  </div>
-                  <div className="message-templates__info-item">
-                    <Clock size={14} />
-                    <span className="message-templates__info-value">{formatDate(template.created_at)}</span>
-                  </div>
-                </div>
-                
-                <div className="message-templates__card-actions">
-                  <button 
-                    className="message-templates__action-btn message-templates__action-btn--secondary"
-                    onClick={() => handlePreviewTemplate(template)}
-                  >
-                    <Eye size={16} />
-                    <span>Preview</span>
-                  </button>
-                  
-                  {template.status === 'draft' && (
-                    <button
-                      className="message-templates__action-btn message-templates__action-btn--primary"
-                      onClick={() => handleSubmitDraft(template.id)}
-                      disabled={isLoading}
-                    >
-                      <RefreshCw size={16} />
-                      <span>Submit</span>
-                    </button>
-                  )}
-                  
-                  <div className="message-templates__icon-actions">
-                    <button 
-                      className="message-templates__icon-btn"
-                      onClick={() => handleEditTemplate(template)}
-                      title={template.status === 'draft' ? 'Continue editing' : 'Edit template'}
-                    >
-                      <Edit size={16} />
-                    </button>
-
-                    <button 
-                      className="message-templates__icon-btn message-templates__icon-btn--delete"
-                      onClick={() => confirmDelete(template.id)}
-                      title="Delete template"
-                    >
-                      <Trash size={16} />
-                    </button>
-                  </div>
-                </div>
+        <div className="message-templates__table-container">
+          <div className="message-templates__table-header">
+            <div className="message-templates__table-stats">
+              <span className="message-templates__table-count">
+                {selectedTemplates.length > 0 ? `${selectedTemplates.length} selected` : `${totalFilteredTemplates} templates`}
+              </span>
+            </div>
+            
+            {selectedTemplates.length > 0 && (
+              <div className="message-templates__bulk-actions">
+                <button className="message-templates__bulk-btn">
+                  <Trash size={16} />
+                  Delete Selected
+                </button>
               </div>
-            ))}
+            )}
+          </div>
+
+          <div className="message-templates__table-wrapper">
+            <table className="message-templates__table">
+              <thead>
+                <tr>
+                  <th className="message-templates__table-header-cell">
+                    <input
+                      type="checkbox"
+                      checked={selectedTemplates.length === paginatedTemplates.length && paginatedTemplates.length > 0}
+                      onChange={handleSelectAll}
+                      className="message-templates__checkbox"
+                    />
+                  </th>
+                  <th className="message-templates__table-header-cell message-templates__table-header-cell--sortable" onClick={() => handleSort('name')}>
+                    <div className="message-templates__header-content">
+                      <span>Template Name</span>
+                      <ArrowUpDown size={16} className="message-templates__sort-icon" />
+                    </div>
+                  </th>
+                  <th className="message-templates__table-header-cell message-templates__table-header-cell--sortable" onClick={() => handleSort('category')}>
+                    <div className="message-templates__header-content">
+                      <span>Category</span>
+                      <ArrowUpDown size={16} className="message-templates__sort-icon" />
+                    </div>
+                  </th>
+                  <th className="message-templates__table-header-cell">
+                    <div className="message-templates__header-content">
+                      <span>Header Type</span>
+                    </div>
+                  </th>
+                  <th className="message-templates__table-header-cell">
+                    <div className="message-templates__header-content">
+                      <span>Content Preview</span>
+                    </div>
+                  </th>
+                  <th className="message-templates__table-header-cell message-templates__table-header-cell--sortable" onClick={() => handleSort('status')}>
+                    <div className="message-templates__header-content">
+                      <span>Status</span>
+                      <ArrowUpDown size={16} className="message-templates__sort-icon" />
+                    </div>
+                  </th>
+                  <th className="message-templates__table-header-cell message-templates__table-header-cell--sortable" onClick={() => handleSort('language')}>
+                    <div className="message-templates__header-content">
+                      <span>Language</span>
+                      <ArrowUpDown size={16} className="message-templates__sort-icon" />
+                    </div>
+                  </th>
+                  <th className="message-templates__table-header-cell message-templates__table-header-cell--sortable" onClick={() => handleSort('created_at')}>
+                    <div className="message-templates__header-content">
+                      <span>Created</span>
+                      <ArrowUpDown size={16} className="message-templates__sort-icon" />
+                    </div>
+                  </th>
+                  <th className="message-templates__table-header-cell">
+                    <div className="message-templates__header-content">
+                      <span>Actions</span>
+                    </div>
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {paginatedTemplates.map((template) => (
+                  <tr key={template.id} className="message-templates__table-row">
+                    <td className="message-templates__table-cell">
+                      <input
+                        type="checkbox"
+                        checked={selectedTemplates.includes(template.id)}
+                        onChange={() => handleSelectTemplate(template.id)}
+                        className="message-templates__checkbox"
+                      />
+                    </td>
+                    <td className="message-templates__table-cell">
+                      <div className="message-templates__template-name">
+                        <span className="message-templates__name-primary">{template.name}</span>
+                        {template.whatsapp_id && (
+                          <span className="message-templates__whatsapp-id">ID: {template.whatsapp_id}</span>
+                        )}
+                      </div>
+                    </td>
+                    <td className="message-templates__table-cell">
+                      <span className="message-templates__category-badge">
+                        {getCategoryLabel(template.category)}
+                      </span>
+                    </td>
+                    <td className="message-templates__table-cell">
+                      <div className="message-templates__header-type">
+                        {getHeaderTypeIcon(template.header_type)}
+                        <span>{getHeaderTypeLabel(template.header_type)}</span>
+                      </div>
+                      {/* Debug: Add console log here to see header_type values */}
+                      {console.log('Template header_type:', template.header_type)}
+                    </td>
+                    <td className="message-templates__table-cell">
+                      <div className="message-templates__content-preview">
+                        {template.header_content && (
+                          <div className="message-templates__preview-header">
+                            <strong>{truncateText(template.header_content, 50)}</strong>
+                          </div>
+                        )}
+                        {template.body_text && (
+                          <div className="message-templates__preview-body">
+                            {truncateText(template.body_text, 80)}
+                          </div>
+                        )}
+                        {template.footer_text && (
+                          <div className="message-templates__preview-footer">
+                            <em>{truncateText(template.footer_text, 30)}</em>
+                          </div>
+                        )}
+                      </div>
+                    </td>
+                    <td className="message-templates__table-cell">
+                      <div className="message-templates__status-container">
+                        <span className={`message-templates__status ${getStatusClass(template.status)}`}>
+                          {template.status}
+                        </span>
+                        {template.status === 'pending' && (
+                          <button 
+                            className="message-templates__status-refresh-btn" 
+                            onClick={() => handleCheckStatus(template.id)}
+                            title="Check status"
+                            disabled={isCheckingStatus}
+                          >
+                            <RefreshCw size={14} className={isCheckingStatus ? "message-templates__spinning" : ""} />
+                          </button>
+                        )}
+                      </div>
+                      {template.status === 'rejected' && template.rejection_reason && (
+                        <div className="message-templates__rejection-reason">
+                          <AlertCircle size={12} />
+                          <span>{truncateText(template.rejection_reason, 50)}</span>
+                        </div>
+                      )}
+                    </td>
+                    <td className="message-templates__table-cell">
+                      <span className="message-templates__language">{template.language}</span>
+                    </td>
+                    <td className="message-templates__table-cell">
+                      <div className="message-templates__date-info">
+                        <span className="message-templates__date" title={formatDateTime(template.created_at)}>
+                          {formatDate(template.created_at)}
+                        </span>
+                      </div>
+                    </td>
+                    <td className="message-templates__table-cell">
+                      <div className="message-templates__table-actions">
+                        <button 
+                          className="message-templates__action-btn message-templates__action-btn--icon"
+                          onClick={() => handlePreviewTemplate(template)}
+                          title="Preview"
+                        >
+                          <Eye size={16} />
+                        </button>
+                        
+                        <button 
+                          className="message-templates__action-btn message-templates__action-btn--icon"
+                          onClick={() => handleEditTemplate(template)}
+                          title={template.status === 'draft' ? 'Continue editing' : 'Edit template'}
+                        >
+                          <Edit size={16} />
+                        </button>
+                        
+                        {template.status === 'draft' && (
+                          <button
+                            className="message-templates__action-btn message-templates__action-btn--icon message-templates__action-btn--submit"
+                            onClick={() => handleSubmitDraft(template.id)}
+                            disabled={isLoading}
+                            title="Submit for approval"
+                          >
+                            <RefreshCw size={16} />
+                          </button>
+                        )}
+
+                        <button 
+                          className="message-templates__action-btn message-templates__action-btn--icon message-templates__action-btn--delete"
+                          onClick={() => confirmDelete(template.id)}
+                          title="Delete template"
+                        >
+                          <Trash size={16} />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
           
           {renderPagination()}
-        </>
+        </div>
       )}
       
       {deleteConfirm && (

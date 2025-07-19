@@ -132,7 +132,47 @@ export const conversationService = {
       console.error('Error closing conversation:', error.response?.data);
       throw error.response?.data || error;
     }
+  },
+  uploadFile: async (file) => {
+  try {
+    const formData = new FormData();
+    formData.append('file', file);
+
+    const response = await apiClient.post('/files/upload', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data'
+      }
+    });
+
+    if (!response.data.success) {
+      throw new Error(response.data.message || 'Failed to upload file');
+    }
+
+    return response.data.data;
+  } catch (error) {
+    console.error('Error uploading file:', error.response?.data);
+    throw error.response?.data || error;
   }
+},
+
+sendFileMessage: async (conversationId, fileId, caption = '') => {
+  try {
+    const response = await apiClient.post(
+      `/files/conversations/${conversationId}/send-file`,
+      { fileId, caption }
+    );
+
+    if (!response.data.success) {
+      throw new Error(response.data.message || 'Failed to send file message');
+    }
+
+    return response.data.data;
+  } catch (error) {
+    console.error('Error sending file message:', error.response?.data);
+    throw error.response?.data || error;
+  }
+}
+
 };
 
 export default conversationService;
