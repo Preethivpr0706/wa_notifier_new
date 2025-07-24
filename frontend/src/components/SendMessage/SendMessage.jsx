@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { FileText, Users, Image, Video, Upload, Send, Calendar, Clock, AlertTriangle, Check, ChevronDown, ChevronUp } from 'lucide-react';
 import FieldMapper from './FieldMapper';
@@ -27,7 +27,8 @@ function SendMessage() {
   const [successMessage, setSuccessMessage] = useState('');
   const [isDraftSaving, setIsDraftSaving] = useState(false);
   const [showTemplateSelection, setShowTemplateSelection] = useState(false);
-  
+  const [csvListName, setCsvListName] = useState('');
+
   // Section completion states
   const [sectionStates, setSectionStates] = useState({
     template: { completed: false, expanded: true },
@@ -49,6 +50,62 @@ function SendMessage() {
   });
 
   const fileInputRef = useRef(null);
+  const [listNameValidation, setListNameValidation] = useState({
+    isChecking: false,
+    isValid: null,
+    message: ''
+  });
+
+  // Debounced function to check list name availability
+  const checkListNameAvailability = useCallback(
+    debounce(async (listName) => {
+      if (!listName.trim()) {
+        setListNameValidation({
+          isChecking: false,
+          isValid: null,
+          message: ''
+        });
+        return;
+      }
+
+      setListNameValidation(prev => ({ ...prev, isChecking: true }));
+
+      try {
+        const response = await contactService.checkListNameAvailability(listName.trim());
+        setListNameValidation({
+          isChecking: false,
+          isValid: response.available,
+          message: response.message
+        });
+      } catch (error) {
+        setListNameValidation({
+          isChecking: false,
+          isValid: null,
+          message: 'Error checking list name'
+        });
+      }
+    }, 500), // 500ms delay
+    []
+  );
+
+  // Handle CSV list name change with validation
+  const handleCsvListNameChange = (e) => {
+    const value = e.target.value;
+    setCsvListName(value);
+    
+    // Reset validation state immediately
+    setListNameValidation({
+      isChecking: false,
+      isValid: null,
+      message: ''
+    });
+
+    // Check availability after user stops typing
+    if (value.trim()) {
+      checkListNameAvailability(value);
+    }
+  };
+
 
   // Fetch templates and contacts
   useEffect(() => {
@@ -104,16 +161,45 @@ function SendMessage() {
     }));
   };
 
+  // Update the validateAudience function
   const validateAudience = () => {
     if (formData.audienceType === 'all') {
       return contacts.length > 0;
     } else if (formData.audienceType === 'list') {
       return !!formData.contactList;
     } else if (formData.audienceType === 'custom') {
-      return csvData.length > 0;
+      return csvData.length > 0 && 
+             csvListName.trim() !== '' && 
+             listNameValidation.isValid === true; // Must be explicitly valid
     }
     return false;
   };
+const saveCSVContacts = async () => {
+  if (!csvData.length || !csvListName.trim()) return null;
+  
+  try {
+    // Create a File object from CSV data
+    const csvContent = Papa.unparse(csvData.map(contact => ({
+      fname: contact.fname || '',
+      lname: contact.lname || '',
+      wanumber: contact.wanumber,
+      email: contact.email || ''
+    })));
+    
+    const blob = new Blob([csvContent], { type: 'text/csv' });
+    const file = new File([blob], 'contacts.csv', { type: 'text/csv' });
+    
+    const formData = new FormData();
+    formData.append('listName', csvListName);
+    formData.append('csvFile', file); // Changed from 'file' to 'csvFile'
+    
+    const response = await contactService.importContacts(formData);
+    return response.data.listId;
+  } catch (error) {
+    console.error('Failed to save CSV contacts:', error);
+    throw new Error('Failed to save contacts to database');
+  }
+};
 
   const validateMapping = (templateVariables) => {
     if (templateVariables.length === 0) return true;
@@ -289,101 +375,134 @@ function SendMessage() {
   };
 
   const handleSubmit = async (e) => {
-    e.preventDefault();
-    
-    // Check if all sections are completed
-    const allCompleted = Object.values(sectionStates).every(section => section.completed);
-    if (!allCompleted) {
-      setError('Please complete all sections before sending.');
+  e.preventDefault();
+  
+  // Additional validation for custom audience
+  if (formData.audienceType === 'custom') {
+    if (!csvListName.trim()) {
+      setError('Please enter a list name for your CSV contacts.');
       return;
     }
     
-    try {
-      setIsLoading(true);
-      
-      let targetContacts = [];
-      
-      if (formData.audienceType === 'all') {
-        targetContacts = contacts;
-      } else if (formData.audienceType === 'list') {
-        targetContacts = contacts.filter(c => c.list_id === formData.contactList);
-      } else if (formData.audienceType === 'custom') {
-        targetContacts = csvData;
-      }
-      
-      const payload = {
-        templateId: formData.templateId,
-        campaignName: formData.campaignName,
-        audience_type: formData.audienceType.toLowerCase(),
-        contacts: targetContacts.map(c => ({
-          id: c.id,
-          wanumber: c.wanumber,
-          fname: c.fname || '',
-          lname: c.lname || '',
-          email: c.email || '',
-          list_id: c.list_id || null
-        })),
-        fieldMappings: formData.fieldMappings,
-        sendNow: formData.sendNow,
-        scheduledAt: formData.sendNow ? null : 
-          `${formData.scheduledDate}T${formData.scheduledTime}:00Z`,
-        list_id: formData.audienceType === 'list' ? formData.contactList : null,
-        is_custom: formData.audienceType === 'custom'
-      };
-
-      const response = await messageService.sendBulkMessages(payload);
-      navigate('/campaigns', { 
-        state: { success: 'Messages sent successfully!' } 
-      });
-    } catch (err) {
-      const errorMsg = err.response?.data?.message || err.message || 'Failed to send messages';
-      setError(errorMsg);
-      console.error('Send error:', err.response?.data || err);
-    } finally {
-      setIsLoading(false);
+    if (listNameValidation.isValid === false) {
+      setError('Please choose a different list name. The current name already exists.');
+      return;
     }
-  };
-
-  const handleSaveAsDraft = async () => {
-    try {
-      setIsDraftSaving(true);
-      
-      let targetContacts = [];
-      if (formData.audienceType === 'all') {
-        targetContacts = contacts;
-      } else if (formData.audienceType === 'list') {
-        targetContacts = contacts.filter(c => c.list_id === formData.contactList);
-      } else if (formData.audienceType === 'custom') {
-        targetContacts = csvData;
-      }
-      
-      const payload = {
-        templateId: formData.templateId,
-        campaignName: formData.campaignName,
-        audience_type: formData.audienceType.toLowerCase(),
-        contacts: targetContacts.map(c => ({
-          id: c.id,
-          wanumber: c.wanumber,
-          fname: c.fname || '',
-          lname: c.lname || '',
-          email: c.email || '',
-          list_id: c.list_id || null
-        })),
-        fieldMappings: formData.fieldMappings,
-        scheduledAt: formData.sendNow ? null : 
-          `${formData.scheduledDate}T${formData.scheduledTime}:00Z`
-      };
-
-      await messageService.saveDraft(payload);
-      navigate('/campaigns', { 
-        state: { success: 'Campaign saved as draft!' } 
-      });
-    } catch (err) {
-      setError('Failed to save draft: ' + (err.message || 'Unknown error'));
-    } finally {
-      setIsDraftSaving(false);
+    
+    if (listNameValidation.isValid === null && csvListName.trim()) {
+      setError('Please wait for list name validation to complete.');
+      return;
     }
-  };
+  }
+  
+  // Check if all sections are completed
+  const allCompleted = Object.values(sectionStates).every(section => section.completed);
+  if (!allCompleted) {
+    setError('Please complete all sections before sending.');
+    return;
+  }
+  
+  try {
+    setIsLoading(true);
+    
+    let targetContacts = [];
+    let savedListId = null;
+    
+    if (formData.audienceType === 'all') {
+      targetContacts = contacts;
+    } else if (formData.audienceType === 'list') {
+      targetContacts = contacts.filter(c => c.list_id === formData.contactList);
+    } else if (formData.audienceType === 'custom') {
+      // Save CSV contacts to database first
+      savedListId = await saveCSVContacts();
+      targetContacts = csvData.map(contact => ({
+        ...contact,
+        list_id: savedListId
+      }));
+    }
+    
+    const payload = {
+      templateId: formData.templateId,
+      campaignName: formData.campaignName,
+      audience_type: formData.audienceType.toLowerCase(),
+      contacts: targetContacts.map(c => ({
+        id: c.id,
+        wanumber: c.wanumber,
+        fname: c.fname || '',
+        lname: c.lname || '',
+        email: c.email || '',
+        list_id: c.list_id || savedListId
+      })),
+      fieldMappings: formData.fieldMappings,
+      sendNow: formData.sendNow,
+      scheduledAt: formData.sendNow ? null : 
+        `${formData.scheduledDate}T${formData.scheduledTime}:00Z`,
+      list_id: formData.audienceType === 'list' ? formData.contactList : savedListId,
+      is_custom: formData.audienceType === 'custom',
+      csvListName: formData.audienceType === 'custom' ? csvListName : null
+    };
+
+    const response = await messageService.sendBulkMessages(payload);
+    navigate('/campaigns', { 
+      state: { success: 'Messages sent successfully!' } 
+    });
+  } catch (err) {
+    const errorMsg = err.response?.data?.message || err.message || 'Failed to send messages';
+    setError(errorMsg);
+    console.error('Send error:', err.response?.data || err);
+  } finally {
+    setIsLoading(false);
+  }
+};
+
+ const handleSaveAsDraft = async () => {
+  try {
+    setIsDraftSaving(true);
+    
+    let targetContacts = [];
+    let savedListId = null;
+    
+    if (formData.audienceType === 'all') {
+      targetContacts = contacts;
+    } else if (formData.audienceType === 'list') {
+      targetContacts = contacts.filter(c => c.list_id === formData.contactList);
+    } else if (formData.audienceType === 'custom') {
+      // Save CSV contacts to database first
+      savedListId = await saveCSVContacts();
+      targetContacts = csvData.map(contact => ({
+        ...contact,
+        list_id: savedListId
+      }));
+    }
+    
+    const payload = {
+      templateId: formData.templateId,
+      campaignName: formData.campaignName,
+      audience_type: formData.audienceType.toLowerCase(),
+      contacts: targetContacts.map(c => ({
+        id: c.id,
+        wanumber: c.wanumber,
+        fname: c.fname || '',
+        lname: c.lname || '',
+        email: c.email || '',
+        list_id: c.list_id || savedListId
+      })),
+      fieldMappings: formData.fieldMappings,
+      scheduledAt: formData.sendNow ? null : 
+        `${formData.scheduledDate}T${formData.scheduledTime}:00Z`,
+      csvListName: formData.audienceType === 'custom' ? csvListName : null
+    };
+
+    await messageService.saveDraft(payload);
+    navigate('/campaigns', { 
+      state: { success: 'Campaign saved as draft!' } 
+    });
+  } catch (err) {
+    setError('Failed to save draft: ' + (err.message || 'Unknown error'));
+  } finally {
+    setIsDraftSaving(false);
+  }
+};
 
   const selectedTemplate = templates.find(t => t.id === formData.templateId);
   const contactFields = contacts.length > 0 ? Object.keys(contacts[0]) : [];
@@ -589,30 +708,72 @@ function SendMessage() {
               )}
 
               {formData.audienceType === 'custom' && (
-                <div className="csv-upload-section">
-                  <div className="form-field">
-                    <label htmlFor="customAudience">Upload CSV File</label>
-                    <div className="file-upload-area">
-                      <input
-                        type="file"
-                        id="customAudience"
-                        name="customAudience"
-                        accept=".csv"
-                        onChange={handleFileUpload}
-                        ref={fileInputRef}
-                        className="file-input"
-                      />
-                      <div className="file-upload-content">
-                        <Upload size={24} />
-                        <div>
-                          <p className="upload-text">
-                            {fileName ? fileName : 'Drop your CSV file here or click to browse'}
-                          </p>
-                          <p className="upload-hint">Required fields: wanumber</p>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
+        <div className="csv-upload-section">
+          <div className="form-field">
+            <label htmlFor="csvListName">
+              List Name *
+              {listNameValidation.isChecking && (
+                <span className="validation-spinner">Checking...</span>
+              )}
+            </label>
+            <div className="input-with-validation">
+              <input
+                type="text"
+                id="csvListName"
+                name="csvListName"
+                value={csvListName}
+                onChange={handleCsvListNameChange}
+                placeholder="Enter a name for this contact list"
+                className={`input-field ${
+                  listNameValidation.isValid === false ? 'error' : 
+                  listNameValidation.isValid === true ? 'success' : ''
+                }`}
+                required
+              />
+              <div className="validation-indicator">
+                {listNameValidation.isChecking && (
+                  <div className="spinner-small"></div>
+                )}
+                {listNameValidation.isValid === true && (
+                  <Check size={16} className="validation-success" />
+                )}
+                {listNameValidation.isValid === false && (
+                  <AlertTriangle size={16} className="validation-error" />
+                )}
+              </div>
+            </div>
+            {listNameValidation.message && (
+              <div className={`validation-message ${
+                listNameValidation.isValid === false ? 'error' : 'success'
+              }`}>
+                {listNameValidation.message}
+              </div>
+            )}
+          </div>
+
+    <div className="form-field">
+      <label htmlFor="customAudience">Upload CSV File</label>
+      <div className="file-upload-area">
+        <input
+          type="file"
+          id="customAudience"
+          name="customAudience"
+          accept=".csv"
+          onChange={handleFileUpload}
+          ref={fileInputRef}
+          className="file-input"
+        />
+        <div className="file-upload-content">
+          <Upload size={24} />
+          <div>
+            <p className="upload-text">
+              {fileName ? fileName : 'Drop your CSV file here or click to browse'}
+            </p>
+            <p className="upload-hint">Required fields: wanumber</p>
+          </div>
+        </div>
+      </div>
+    </div>
 
                   {validationErrors.length > 0 && (
                     <div className="alert alert-error">
@@ -885,6 +1046,18 @@ function extractVariables(text) {
     matches.push(match[1]);
   }
   return [...new Set(matches)];
+}
+// Debounce utility function
+function debounce(func, wait) {
+  let timeout;
+  return function executedFunction(...args) {
+    const later = () => {
+      clearTimeout(timeout);
+      func(...args);
+    };
+    clearTimeout(timeout);
+    timeout = setTimeout(later, wait);
+  };
 }
 
 export default SendMessage;

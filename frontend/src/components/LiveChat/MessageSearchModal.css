@@ -1,0 +1,243 @@
+/* Message Search Modal Styles */
+
+.message-search-modal__overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: rgba(0, 0, 0, 0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+    padding: 20px;
+}
+
+.message-search-modal {
+    background: white;
+    border-radius: 12px;
+    width: 100%;
+    max-width: 500px;
+    max-height: 80vh;
+    display: flex;
+    flex-direction: column;
+    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+}
+
+.message-search-modal__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 20px 24px 16px;
+    border-bottom: 1px solid #e5e7eb;
+}
+
+.message-search-modal__title {
+    font-size: 18px;
+    font-weight: 600;
+    color: #111827;
+    margin: 0;
+}
+
+.message-search-modal__close {
+    background: none;
+    border: none;
+    color: #6b7280;
+    cursor: pointer;
+    padding: 4px;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s ease;
+}
+
+.message-search-modal__close:hover {
+    background-color: #f3f4f6;
+    color: #374151;
+}
+
+.message-search-modal__search {
+    padding: 16px 24px;
+    border-bottom: 1px solid #e5e7eb;
+}
+
+.search-input-container {
+    display: flex;
+    align-items: center;
+    background-color: #f9fafb;
+    border-radius: 8px;
+    padding: 8px 12px;
+    gap: 8px;
+    border: 1px solid #e5e7eb;
+}
+
+.search-input-container svg {
+    color: #6b7280;
+    flex-shrink: 0;
+}
+
+.search-input {
+    flex: 1;
+    border: none;
+    outline: none;
+    font-size: 14px;
+    color: #111827;
+    background: transparent;
+}
+
+.search-input::placeholder {
+    color: #9ca3af;
+}
+
+.message-search-modal__results {
+    flex: 1;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+}
+
+.search-empty-state {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    padding: 60px 24px;
+    color: #6b7280;
+    gap: 16px;
+}
+
+.search-empty-state svg {
+    opacity: 0.5;
+}
+
+.search-empty-state p {
+    margin: 0;
+    font-size: 14px;
+}
+
+.search-results {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.search-results__header {
+    padding: 12px 24px;
+    border-bottom: 1px solid #e5e7eb;
+    background-color: #f9fafb;
+}
+
+.search-results__count {
+    font-size: 12px;
+    color: #6b7280;
+    font-weight: 500;
+}
+
+.search-results__list {
+    flex: 1;
+    overflow-y: auto;
+}
+
+.search-result-item {
+    display: block;
+    padding: 12px 24px;
+    border-bottom: 1px solid #f3f4f6;
+    cursor: pointer;
+    transition: background-color 0.2s ease;
+    text-decoration: none;
+    color: inherit;
+}
+
+.search-result-item:hover {
+    background-color: #f9fafb;
+}
+
+.search-result-item:last-child {
+    border-bottom: none;
+}
+
+.search-result-item__content {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.search-result-item__text {
+    font-size: 14px;
+    color: #111827;
+    line-height: 1.4;
+}
+
+.search-result-item__media {
+    color: #6b7280;
+    font-style: italic;
+}
+
+.search-result-item__meta {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+    color: #6b7280;
+}
+
+.search-result-item__direction {
+    font-weight: 500;
+}
+
+.search-result-item__time {
+    opacity: 0.8;
+}
+
+.search-highlight {
+    background-color: #fef3c7;
+    color: #92400e;
+    padding: 1px 2px;
+    border-radius: 2px;
+    font-weight: 500;
+}
+
+
+/* Scrollbar styling */
+
+.search-results__list::-webkit-scrollbar {
+    width: 6px;
+}
+
+.search-results__list::-webkit-scrollbar-track {
+    background: #f1f1f1;
+}
+
+.search-results__list::-webkit-scrollbar-thumb {
+    background: #c1c1c1;
+    border-radius: 3px;
+}
+
+.search-results__list::-webkit-scrollbar-thumb:hover {
+    background: #a8a8a8;
+}
+
+
+/* Mobile responsive */
+
+@media (max-width: 768px) {
+    .message-search-modal__overlay {
+        padding: 10px;
+    }
+    .message-search-modal {
+        max-height: 90vh;
+    }
+    .message-search-modal__header,
+    .message-search-modal__search,
+    .search-results__header,
+    .search-result-item {
+        padding-left: 16px;
+        padding-right: 16px;
+    }
+    .search-empty-state {
+        padding: 40px 16px;
+    }
+}

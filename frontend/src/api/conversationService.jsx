@@ -67,20 +67,17 @@ export const conversationService = {
     }
   },
 
-  getConversationMessages: async (conversationId) => {
-    try {
-      const response = await apiClient.get(`/conversations/${conversationId}/messages`);
-      
-      if (!response.data.success) {
-        throw new Error(response.data.message || 'Failed to fetch messages');
-      }
-      
-      return response.data;
-    } catch (error) {
-      console.error('Error fetching messages:', error.response?.data);
-      throw error.response?.data || error;
-    }
-  },
+  getConversationMessages: async (conversationId, businessId) => {
+  try {
+    const response = await apiClient.get(
+      `/conversations/${conversationId}/messages`,
+      { params: { businessId } }
+    );
+    return response.data;
+  } catch (error) {
+    throw error.response?.data || error;
+  }
+},
 
   sendMessage: async (conversationId, messageData) => {
     try {
@@ -100,24 +97,7 @@ export const conversationService = {
     }
   },
 
-  assignConversation: async (conversationId) => {
-    try {
-      const response = await apiClient.post(
-        `/conversations/${conversationId}/assign`
-      );
-      
-      if (!response.data.success) {
-        throw new Error(response.data.message || 'Failed to assign conversation');
-      }
-      
-      return response.data;
-    } catch (error) {
-      console.error('Error assigning conversation:', error.response?.data);
-      throw error.response?.data || error;
-    }
-  },
-
-  closeConversation: async (conversationId) => {
+ closeConversation: async (conversationId) => {
     try {
       const response = await apiClient.post(
         `/conversations/${conversationId}/close`
@@ -133,6 +113,56 @@ export const conversationService = {
       throw error.response?.data || error;
     }
   },
+
+  archiveConversation: async (conversationId) => {
+    try {
+      const response = await apiClient.post(
+        `/conversations/${conversationId}/archive`
+      );
+      
+      if (!response.data.success) {
+        throw new Error(response.data.message || 'Failed to archive conversation');
+      }
+      
+      return response.data;
+    } catch (error) {
+      console.error('Error archiving conversation:', error.response?.data);
+      throw error.response?.data || error;
+    }
+  },
+
+  reopenConversation: async (conversationId) => {
+    try {
+      const response = await apiClient.post(
+        `/conversations/${conversationId}/reopen`
+      );
+      
+      if (!response.data.success) {
+        throw new Error(response.data.message || 'Failed to reopen conversation');
+      }
+      
+      return response.data;
+    } catch (error) {
+      console.error('Error reopening conversation:', error.response?.data);
+      throw error.response?.data || error;
+    }
+  },
+
+  getConversationStats: async () => {
+    try {
+      const response = await apiClient.get('/conversations/stats/overview');
+      
+      if (!response.data.success) {
+        throw new Error(response.data.message || 'Failed to fetch conversation stats');
+      }
+      
+      return response.data;
+    } catch (error) {
+      console.error('Error fetching conversation stats:', error.response?.data);
+      throw error.response?.data || error;
+    }
+  },
+
   uploadFile: async (file) => {
   try {
     const formData = new FormData();

@@ -11,20 +11,14 @@ const upload = multer({
     }
 });
 
-
 // Contact list routes
 router.post('/lists', ContactController.createList);
 router.get('/lists', ContactController.getLists);
 router.get('/sendLists', ContactController.getSendingLists);
 
-
-// Contact routes
-router.post('/', ContactController.createContact);
+// IMPORTANT: Put specific routes BEFORE parameterized routes
+router.get('/check-list-name', ContactController.checkListNameAvailability);
 router.post('/import', upload.single('csvFile'), ContactController.importContacts);
-router.get('/', ContactController.getContacts);
-router.get('/:id', ContactController.getContactById);
-router.put('/:id', ContactController.updateContact);
-router.delete('/:id', ContactController.deleteContact);
 router.get('/user-contacts', async(req, res) => {
     try {
         const contacts = await ContactController.getAllByUser(1); //userid
@@ -40,5 +34,11 @@ router.get('/user-contacts', async(req, res) => {
     }
 });
 
+// Contact routes - PUT PARAMETERIZED ROUTES LAST
+router.post('/', ContactController.createContact);
+router.get('/', ContactController.getContacts);
+router.get('/:id', ContactController.getContactById); // This should be AFTER specific routes
+router.put('/:id', ContactController.updateContact);
+router.delete('/:id', ContactController.deleteContact);
 
 module.exports = router;

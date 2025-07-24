@@ -5,7 +5,9 @@ const Contact = require('../controllers/ContactController');
 const Template = require('../models/templateModel');
 const WhatsappConfigService = require('../services/WhatsappConfigService');
 const { v4: uuidv4 } = require('uuid');
-
+// Convert timestamp to MySQL datetime format
+const moment = require('moment-timezone');
+const ConversationController = require('../controllers/conversationController');
 const { pool } = require('../config/database'); // Add this at the top
 class MessageController {
 
@@ -20,7 +22,8 @@ class MessageController {
                     contacts,
                     fieldMappings,
                     sendNow,
-                    scheduledAt
+                    scheduledAt,
+                    csvListName
                 } = req.body;
                 const userId = req.user.id;
                 const businessId = req.user.businessId;
@@ -91,16 +94,66 @@ class MessageController {
                     });
                 }
 
+                // Handle CSV contact saving if it's a custom audience
+                let actualListId = list_id;
+                if (is_custom && csvListName && contacts && contacts.length > 0) {
+                    try {
+                        // Create the contact list
+                        const [listResult] = await pool.execute(
+                            'INSERT INTO contact_lists (name, user_id) VALUES (?, ?)', [csvListName, userId]
+                        );
+
+                        // Get the inserted list's UUID
+                        const [lists] = await pool.execute(
+                            'SELECT id FROM contact_lists WHERE name = ? AND user_id = ? ORDER BY created_at DESC LIMIT 1', [csvListName, userId]
+                        );
+
+                        if (lists.length > 0) {
+                            actualListId = lists[0].id;
+
+                            // Prepare batch insert for contacts
+                            const contactsToInsert = contacts.map(contact => [
+                                contact.fname || '',
+                                contact.lname || '',
+                                contact.wanumber,
+                                contact.email || '',
+                                actualListId,
+                                userId // Add user_id if your contacts table has it
+                            ]);
+
+                            // Batch insert contacts
+                            await pool.query(
+                                'INSERT INTO contacts (fname, lname, wanumber, email, list_id, user_id) VALUES ?', [contactsToInsert]
+                            );
+
+                            console.log(`Saved ${contactsToInsert.length} contacts to list: ${csvListName}`);
+                        }
+                    } catch (saveError) {
+                        console.error('Error saving CSV contacts:', saveError);
+                        // Continue with the campaign even if saving contacts fails
+                    }
+                }
                 // Get target contacts based on audience type
                 let targetContacts = [];
 
                 if (normalizedAudienceType === 'all') {
                     targetContacts = await Contact.getAllByUser(userId);
-                } else if (normalizedAudienceType === 'list' || normalizedAudienceType === 'custom') {
-                    // Use the provided contacts for both list and custom types
-                    targetContacts = contacts;
+                } else if (normalizedAudienceType === 'list') {
+                    // Get contacts from the specified list
+                    targetContacts = await Contact.getByList(actualListId, userId);
+                } else if (normalizedAudienceType === 'custom') {
+                    // For custom, if we saved to DB, get from there, otherwise use provided contacts
+                    if (actualListId) {
+                        try {
+                            targetContacts = await Contact.getByList(actualListId, userId);
+                        } catch (error) {
+                            console.log('Using provided contacts as fallback');
+                            targetContacts = contacts.map(c => ({...c, list_id: actualListId }));
+                        }
+                    } else {
+                        targetContacts = contacts;
+                    }
                 }
-
 
                 if (!targetContacts || targetContacts.length === 0) {
                     return res.status(400).json({
@@ -114,6 +167,7 @@ class MessageController {
                 // Create campaign with appropriate status
                 // In MessageController.sendBulkMessages
 
+                // Update campaign creation to include the actual list_id
                 const campaign = await Campaign.create({
                     name: `${campaignName} - ${new Date().toLocaleString()}`,
                     templateId,
@@ -121,12 +175,13 @@ class MessageController {
                     scheduledAt: sendNow ? null : scheduledAt,
                     userId,
                     businessId,
-                    contacts: targetContacts, // Add these
-                    fieldMappings, // Add these
+                    contacts: targetContacts,
+                    fieldMappings,
                     recipientCount: targetContacts.length,
                     deliveredCount: 0,
                     failedCount: 0,
-                    readCount: 0
+                    readCount: 0,
+                    list_id: actualListId // Use the actual list ID
                 });
                 if (sendNow) {
                     const results = {
@@ -141,6 +196,13 @@ class MessageController {
                             if (!contact || typeof contact !== 'object' || !contact.wanumber) {
                                 throw new Error('Invalid contact format');
                             }
+
+                            // IMPORTANT: Ensure conversation exists for this contact
+                            await ConversationController.ensureConversationForCampaign(
+                                businessId,
+                                contact.wanumber,
+                                contact.id
+                            );
 
                             // Prepare message components
                             const message = {
@@ -186,7 +248,6 @@ class MessageController {
                             // To this:
                             // Send message
                             const sendResult = await WhatsAppService.sendTemplateMessage(message, userId, campaign.id);
-
                             // Create message record with initial status
                             await MessageController.createMessageRecord({
                                 messageId: sendResult.messageId,
@@ -210,6 +271,18 @@ class MessageController {
                                 await Campaign.incrementStats(campaign.id, update);
                             }
                         } catch (error) {
+                            console.error(`Error sending to ${contact.wanumber}:`, error);
+
+                            // Still try to ensure conversation exists even on failure
+                            try {
+                                await ConversationController.ensureConversationForCampaign(
+                                    businessId,
+                                    contact.wanumber,
+                                    contact.id
+                                );
+                            } catch (convError) {
+                                console.error('Failed to create conversation for failed message:', convError);
+                            }
                             // Handle failed message creation
                             await MessageController.createMessageRecord({
                                 messageId: `failed-${Date.now()}`,
@@ -217,7 +290,8 @@ class MessageController {
                                 businessId,
                                 contactId: contact.id,
                                 status: 'failed',
-                                error: error.message
+                                error: error.message,
+                                timestamp: new Date().toISOString()
                             });
 
                             await Campaign.incrementStats(campaign.id, { failed_count: 1 });
@@ -264,6 +338,17 @@ class MessageController {
         // Add this helper method to MessageController
     static async createMessageRecord({ messageId, campaignId, businessId, contactId, status, error = null, timestamp = null }) {
         const connection = await pool.getConnection();
+        console.log(timestamp)
+
+
+        let mysqlTimestamp = null;
+        if (timestamp) {
+            // Convert to IST and format for MySQL
+            mysqlTimestamp = moment(timestamp).tz('Asia/Kolkata').format('YYYY-MM-DD HH:mm:ss');
+        }
+        console.log(mysqlTimestamp);
+
+        console.log(mysqlTimestamp)
         try {
             // Ensure we have required parameters
             if (!messageId || !campaignId || !businessId || !contactId) {
@@ -272,8 +357,8 @@ class MessageController {
 
             const [result] = await connection.execute(
                 `INSERT INTO messages
-            (id, campaign_id, business_id, contact_id, status, error, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, NOW(), NOW())`, [messageId, campaignId, businessId, contactId, status, error]
+            (id, campaign_id, business_id, contact_id, status, error, created_at, updated_at, timestamp)
+            VALUES (?, ?, ?, ?, ?, ?, NOW(), NOW(),?)`, [messageId, campaignId, businessId, contactId, status, error, mysqlTimestamp]
             );
 
             console.log(`Created message record for ${messageId} with status ${status}`);
@@ -743,7 +828,8 @@ class MessageController {
                         businessId,
                         contactId: contact.id,
                         status: 'failed',
-                        error: contactError.message
+                        error: contactError.message,
+                        timestamp: new Date().toISOString(),
                     });
 
                     failedCount++;
@@ -799,7 +885,8 @@ class MessageController {
                 audience_type,
                 contacts,
                 fieldMappings,
-                scheduledAt = null
+                scheduledAt = null,
+                csvListName
             } = req.body;
 
             const userId = req.user.id;
@@ -820,6 +907,43 @@ class MessageController {
                 });
             }
 
+            // Handle CSV contact saving if it's a custom audience
+            let actualListId = null;
+            if (audience_type === 'custom' && csvListName && contacts && contacts.length > 0) {
+                try {
+                    // Create the contact list
+                    const [listResult] = await pool.execute(
+                        'INSERT INTO contact_lists (name, user_id) VALUES (?, ?)', [csvListName, userId]
+                    );
+
+                    // Get the inserted list's UUID
+                    const [lists] = await pool.execute(
+                        'SELECT id FROM contact_lists WHERE name = ? AND user_id = ? ORDER BY created_at DESC LIMIT 1', [csvListName, userId]
+                    );
+
+                    if (lists.length > 0) {
+                        actualListId = lists[0].id;
+
+                        // Prepare batch insert for contacts
+                        const contactsToInsert = contacts.map(contact => [
+                            contact.fname || '',
+                            contact.lname || '',
+                            contact.wanumber,
+                            contact.email || '',
+                            actualListId,
+                            userId
+                        ]);
+
+                        // Batch insert contacts
+                        await pool.query(
+                            'INSERT INTO contacts (fname, lname, wanumber, email, list_id, user_id) VALUES ?', [contactsToInsert]
+                        );
+                    }
+                } catch (saveError) {
+                    console.error('Error saving CSV contacts:', saveError);
+                }
+            }
+
             // Create campaign as draft
             const campaign = await Campaign.create({
                 name: `${campaignName} - ${new Date().toLocaleString()}`,
@@ -830,7 +954,8 @@ class MessageController {
                 businessId,
                 contacts,
                 fieldMappings,
-                recipientCount: contacts.length
+                recipientCount: contacts.length,
+                list_id: actualListId
             });
 
             res.json({
@@ -882,6 +1007,20 @@ class MessageController {
             } catch (parseError) {
                 console.error('Error parsing JSON:', parseError);
                 throw new Error('Invalid campaign data format');
+            }
+
+            // IMPORTANT: Ensure conversations exist for all recipients before sending
+            for (const contact of contacts) {
+                try {
+                    await ConversationController.ensureConversationForCampaign(
+                        businessId,
+                        contact.wanumber,
+                        contact.id
+                    );
+                } catch (convError) {
+                    console.error(`Failed to create conversation for ${contact.wanumber}:`, convError);
+                    // Continue with other contacts even if one fails
+                }
             }
 
             // Update campaign status to sending

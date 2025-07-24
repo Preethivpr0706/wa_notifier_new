@@ -494,6 +494,17 @@
     margin-bottom: var(--mt-spacing-xs);
 }
 
+
+/* NEW: Media header preview styling */
+
+.message-templates__preview-header--media {
+    display: flex;
+    align-items: center;
+    gap: var(--mt-spacing-xs);
+    color: var(--mt-primary-color);
+    font-weight: 600;
+}
+
 .message-templates__preview-body {
     color: var(--mt-neutral-700);
     margin-bottom: var(--mt-spacing-xs);

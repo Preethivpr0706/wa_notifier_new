@@ -1083,3 +1083,78 @@
     border-color: #3b82f6;
     background-color: #eff6ff;
 }
+
+.input-with-validation {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
+.input-with-validation .input-field {
+    flex: 1;
+    padding-right: 40px;
+}
+
+.input-field.error {
+    border-color: #ef4444;
+    box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.1);
+}
+
+.input-field.success {
+    border-color: #10b981;
+    box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.1);
+}
+
+.validation-indicator {
+    position: absolute;
+    right: 12px;
+    display: flex;
+    align-items: center;
+}
+
+.validation-success {
+    color: #10b981;
+}
+
+.validation-error {
+    color: #ef4444;
+}
+
+.validation-message {
+    margin-top: 4px;
+    font-size: 0.875rem;
+    font-weight: 500;
+}
+
+.validation-message.error {
+    color: #ef4444;
+}
+
+.validation-message.success {
+    color: #10b981;
+}
+
+.validation-spinner {
+    margin-left: 8px;
+    font-size: 0.75rem;
+    color: #6b7280;
+    font-weight: normal;
+}
+
+.spinner-small {
+    width: 16px;
+    height: 16px;
+    border: 2px solid #e5e7eb;
+    border-top: 2px solid #3b82f6;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    0% {
+        transform: rotate(0deg);
+    }
+    100% {
+        transform: rotate(360deg);
+    }
+}

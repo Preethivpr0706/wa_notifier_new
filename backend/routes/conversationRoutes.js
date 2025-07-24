@@ -35,15 +35,21 @@ router.get('/:id', async(req, res) => {
 // Get conversation messages
 router.get('/:id/messages', async(req, res) => {
     try {
+        const conversationId = req.params.id;
+        const businessId = req.query.businessId; // or req.body.businessId if sent via body
+
         const messages = await ConversationController.getConversationMessages(
-            req.params.id
+            conversationId,
+            businessId
         );
+
         res.json({ success: true, data: messages });
     } catch (error) {
         console.error('Error in GET /conversations/:id/messages:', error);
         res.status(500).json({ success: false, message: error.message });
     }
 });
+
 
 // Send message in conversation
 router.post('/:id/messages', async(req, res) => {
@@ -61,30 +67,57 @@ router.post('/:id/messages', async(req, res) => {
     }
 });
 
-// Assign conversation to user
-router.post('/:id/assign', async(req, res) => {
-    try {
-        const result = await ConversationController.assignConversation(
-            req.params.id,
-            req.user.id
-        );
-        res.json({ success: true, data: result });
-    } catch (error) {
-        console.error('Error in POST /conversations/:id/assign:', error);
-        res.status(500).json({ success: false, message: error.message });
-    }
-});
-
 // Close conversation
 router.post('/:id/close', async(req, res) => {
     try {
         const result = await ConversationController.closeConversation(
             req.params.id,
-            req.user.id
+            req.user.businessId
         );
         res.json({ success: true, data: result });
     } catch (error) {
         console.error('Error in POST /conversations/:id/close:', error);
+        res.status(500).json({ success: false, message: error.message });
+    }
+});
+
+// Archive conversation
+router.post('/:id/archive', async(req, res) => {
+    try {
+        const result = await ConversationController.archiveConversation(
+            req.params.id,
+            req.user.businessId
+        );
+        res.json({ success: true, data: result });
+    } catch (error) {
+        console.error('Error in POST /conversations/:id/archive:', error);
+        res.status(500).json({ success: false, message: error.message });
+    }
+});
+
+// Reopen conversation (unarchive/reactivate)
+router.post('/:id/reopen', async(req, res) => {
+    try {
+        const result = await ConversationController.reopenConversation(
+            req.params.id,
+            req.user.businessId
+        );
+        res.json({ success: true, data: result });
+    } catch (error) {
+        console.error('Error in POST /conversations/:id/reopen:', error);
+        res.status(500).json({ success: false, message: error.message });
+    }
+});
+
+// Get conversation statistics
+router.get('/stats/overview', async(req, res) => {
+    try {
+        const stats = await ConversationController.getConversationStats(
+            req.user.businessId
+        );
+        res.json({ success: true, data: stats });
+    } catch (error) {
+        console.error('Error in GET /conversations/stats/overview:', error);
         res.status(500).json({ success: false, message: error.message });
     }
 });

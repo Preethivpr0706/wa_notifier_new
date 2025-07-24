@@ -373,30 +373,62 @@ class ContactController {
         return contacts;
     }
     static async getSendingLists(req, res) {
-        try {
-            const userId = req.user.id;
+            try {
+                const userId = req.user.id;
 
-            const [lists] = await pool.execute(
-                `SELECT cl.id, cl.name, COUNT(c.id) as contactCount 
+                const [lists] = await pool.execute(
+                    `SELECT cl.id, cl.name, COUNT(c.id) as contactCount 
        FROM contact_lists cl
        LEFT JOIN contacts c ON cl.id = c.list_id
        WHERE cl.user_id = ?
        GROUP BY cl.id, cl.name
        ORDER BY cl.created_at DESC`, [userId]
+                );
+
+                res.json({
+                    success: true,
+                    data: lists
+                });
+            } catch (error) {
+                console.error('Error fetching sending lists:', error);
+                res.status(500).json({
+                    success: false,
+                    message: 'Failed to fetch contact lists for sending'
+                });
+            }
+        }
+        // Add this method to ContactController
+    static async checkListNameAvailability(req, res) {
+        console.log("list function called")
+        try {
+            const { listName } = req.query;
+            const userId = req.user.id;
+
+            if (!listName) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'List name is required'
+                });
+            }
+
+            const [existing] = await pool.execute(
+                'SELECT id FROM contact_lists WHERE name = ? AND user_id = ?', [listName.trim(), userId]
             );
 
             res.json({
                 success: true,
-                data: lists
+                available: existing.length === 0,
+                message: existing.length > 0 ? 'List name already exists' : 'List name is available'
             });
         } catch (error) {
-            console.error('Error fetching sending lists:', error);
+            console.error('Error checking list name availability:', error);
             res.status(500).json({
                 success: false,
-                message: 'Failed to fetch contact lists for sending'
+                message: 'Failed to check list name availability'
             });
         }
     }
+
 }
 
 

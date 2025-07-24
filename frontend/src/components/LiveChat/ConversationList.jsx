@@ -1,12 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
-import { Search, Archive, MoreVertical, User } from 'lucide-react';
+import { Link, useParams } from 'react-router-dom';
+import { Search, Archive, MoreVertical, User, MessageCircle, X } from 'lucide-react';
 import { conversationService } from '../../api/conversationService';
 import { useChatWebSocket } from '../../hooks/useChatWebSocket';
 import { authService } from '../../api/authService';
 import './ConversationList.css';
 
 const ConversationList = () => {
+  const { id: activeConversationId } = useParams();
   const [conversations, setConversations] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(true);
@@ -20,10 +21,10 @@ const ConversationList = () => {
   const { notifications } = useChatWebSocket();
 
   const statusFilters = [
-    { value: 'all', label: 'All' },
-    { value: 'active', label: 'Active' },
-    { value: 'closed', label: 'Closed' },
-    { value: 'unassigned', label: 'Unassigned' }
+    { value: 'all', label: 'All Chats', icon: '💬' },
+    { value: 'active', label: 'Active', icon: '🟢' },
+    { value: 'closed', label: 'Closed', icon: '⭕' },
+    { value: 'archived', label: 'Archived', icon: '📋' }
   ];
 
   const fetchConversations = async (reset = false) => {
@@ -38,10 +39,15 @@ const ConversationList = () => {
         currentPage
       );
       
-      console.log(response.data);
+      // Sort by last_message_at in descending order (most recent first)
+      const sortedConversations = response.data.sort((a, b) => {
+        const dateA = a.last_message_at ? new Date(a.last_message_at) : new Date(0);
+        const dateB = b.last_message_at ? new Date(b.last_message_at) : new Date(0);
+        return dateB - dateA;
+      });
       
       setConversations(prev => 
-        reset ? response.data : [...prev, ...response.data]
+        reset ? sortedConversations : [...prev, ...sortedConversations]
       );
       setHasMore(response.data.length === 20);
       if (reset) setPage(1);
@@ -81,10 +87,21 @@ const ConversationList = () => {
     const now = new Date();
     const isToday = date.toDateString() === now.toDateString();
     
+    const yesterday = new Date(now);
+    yesterday.setDate(yesterday.getDate() - 1);
+    const isYesterday = date.toDateString() === yesterday.toDateString();
+    
     if (isToday) {
       return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    } else if (isYesterday) {
+      return 'Yesterday';
     } else {
-      return date.toLocaleDateString([], { month: 'short', day: 'numeric' });
+      const daysDiff = Math.floor((now - date) / (1000 * 60 * 60 * 24));
+      if (daysDiff < 7) {
+        return date.toLocaleDateString([], { weekday: 'short' });
+      } else {
+        return date.toLocaleDateString([], { month: 'short', day: 'numeric' });
+      }
     }
   };
 
@@ -95,9 +112,32 @@ const ConversationList = () => {
     return conversation.client_name || `+${conversation.phone_number}`;
   };
 
-  const filteredConversations = conversations.filter(conv =>
-    getContactName(conv).toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const truncateMessage = (message, maxLength = 35) => {
+    if (!message) return 'No messages yet';
+    if (message.length <= maxLength) return message;
+    return message.substring(0, maxLength) + '...';
+  };
+
+  // Enhanced search function to search both name and phone number
+  const filteredConversations = conversations.filter(conv => {
+    const query = searchQuery.toLowerCase();
+    const contactName = getContactName(conv).toLowerCase();
+    const phoneNumber = conv.phone_number.toString();
+    
+    return contactName.includes(query) || phoneNumber.includes(query);
+  });
+
+  // Calculate unread count (don't show for currently active conversation)
+  const getDisplayUnreadCount = (conversation) => {
+    if (activeConversationId === conversation.id.toString()) {
+      return 0; // Don't show unread count for currently active conversation
+    }
+    return conversation.unread_count || 0;
+  };
+
+  const clearSearch = () => {
+    setSearchQuery('');
+  };
 
   return (
     <div className="conversation-list-container">
@@ -105,36 +145,55 @@ const ConversationList = () => {
         <div className="header-top">
           <div className="profile-section">
             <div className="profile-avatar">
-              <User size={24} />
+              <User size={22} />
+            </div>
+            <div className="profile-info">
+              <h3 className="profile-name">WhatsApp Business</h3>
+              <p className="profile-status">Live Chat Dashboard</p>
             </div>
           </div>
           <div className="header-actions">
-            <button className="action-btn">
-              <Archive size={20} />
+            <button className="action-btn" title="Archive">
+              <Archive size={18} />
             </button>
-            <button className="action-btn">
-              <MoreVertical size={20} />
+            <button className="action-btn" title="More options">
+              <MoreVertical size={18} />
             </button>
           </div>
         </div>
+        
         <div className="search-section">
           <div className="search-container">
-            <Search size={16} />
-            <input
-              type="text"
-              placeholder="Search or start new chat"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-            />
+            <div className="search-input-wrapper">
+              <Search size={18} className="search-icon" />
+              <input
+                type="text"
+                placeholder="Search conversations..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="search-input"
+              />
+              {searchQuery && (
+                <button 
+                  className="search-clear-btn" 
+                  onClick={clearSearch}
+                  title="Clear search"
+                >
+                  <X size={14} />
+                </button>
+              )}
+            </div>
           </div>
         </div>
+        
         <div className="conversation-filters">
           {statusFilters.map(filter => (
             <button
               key={filter.value}
-              className={`filter-btn ${statusFilter === filter.value ? 'active' : ''}`}
+              className={`filter-btn ${statusFilter === filter.value ? 'filter-btn--active' : ''}`}
               onClick={() => setStatusFilter(filter.value)}
             >
+              <span>{filter.icon}</span>
               {filter.label}
             </button>
           ))}
@@ -143,49 +202,71 @@ const ConversationList = () => {
 
       <div className="conversation-items">
         {loading && conversations.length === 0 ? (
-          <div className="loading-state">Loading conversations...</div>
+          <div className="loading-state">
+            <div className="loading-spinner"></div>
+            <span>Loading conversations...</span>
+          </div>
         ) : filteredConversations.length === 0 ? (
-          <div className="empty-state">No conversations found</div>
+          <div className="empty-state">
+            <MessageCircle size={64} />
+            <span>No conversations found</span>
+            <small>Start a new conversation or adjust your filters</small>
+          </div>
         ) : (
           <>
-            {filteredConversations.map(conv => (
-              <Link
-                key={conv.id}
-                to={`/conversations/${conv.id}`}
-                className={`conversation-item ${conv.unread_count > 0 ? 'unread' : ''}`}
-              >
-                <div className="conversation-avatar">
-                  {conv.contact_avatar ? (
-                    <img src={conv.contact_avatar} alt="Profile" />
-                  ) : (
-                    <User size={24} />
-                  )}
-                </div>
-                <div className="conversation-details">
-                  <div className="conversation-header">
-                    <span className="contact-name">{getContactName(conv)}</span>
-                    <span className="conversation-time">
-                      {formatTime(conv.last_message_at)}
-                    </span>
-                  </div>
-                  <div className="conversation-preview">
-                    <p className="message-preview">
-                      {conv.last_message_content || 'No messages yet'}
-                    </p>
-                    {conv.unread_count > 0 && (
-                      <div className="unread-badge">{conv.unread_count}</div>
+            {filteredConversations.map(conv => {
+              const displayUnreadCount = getDisplayUnreadCount(conv);
+              const isActive = activeConversationId === conv.id.toString();
+              
+              return (
+                <Link
+                  key={conv.id}
+                  to={`/conversations/${conv.id}`}
+                  className={`conversation-item ${displayUnreadCount > 0 ? 'conversation-item--unread' : ''} ${isActive ? 'conversation-item--active' : ''}`}
+                >
+                  <div className="conversation-avatar">
+                    {conv.contact_avatar ? (
+                      <img src={conv.contact_avatar} alt="Profile" className="conversation-avatar__image" />
+                    ) : (
+                      <User size={26} />
                     )}
                   </div>
-                </div>
-              </Link>
-            ))}
+                  <div className="conversation-details">
+                    <div className="conversation-header">
+                      <span className="contact-name">{getContactName(conv)}</span>
+                      <span className="conversation-time">
+                        {formatTime(conv.last_message_at)}
+                      </span>
+                    </div>
+                    <div className="conversation-preview">
+                      <p className="message-preview">
+                        {truncateMessage(conv.last_message_content)}
+                      </p>
+                      {displayUnreadCount > 0 && (
+                        <div className="unread-badge">{displayUnreadCount}</div>
+                      )}
+                    </div>
+                  </div>
+                </Link>
+              );
+            })}
             {hasMore && (
               <button 
                 className="load-more-btn"
                 onClick={loadMore}
                 disabled={loading}
               >
-                {loading ? 'Loading...' : 'Load More'}
+                {loading ? (
+                  <>
+                    <div className="loading-spinner loading-spinner--small"></div>
+                    <span>Loading more...</span>
+                  </>
+                ) : (
+                  <>
+                    <span>📄</span>
+                    Load More Conversations
+                  </>
+                )}
               </button>
             )}
           </>

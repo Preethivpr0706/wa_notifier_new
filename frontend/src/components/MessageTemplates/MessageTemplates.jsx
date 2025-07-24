@@ -347,6 +347,43 @@ function MessageTemplates() {
     return text.length > maxLength ? text.substring(0, maxLength) + '...' : text;
   };
 
+  // NEW: Function to render header preview in table
+  const renderHeaderPreview = (template) => {
+    if (!template.header_type) return null;
+    
+    switch (template.header_type) {
+      case 'text':
+        return template.header_content && (
+          <div className="message-templates__preview-header">
+            <strong>{truncateText(template.header_content, 50)}</strong>
+          </div>
+        );
+      case 'image':
+        return (
+          <div className="message-templates__preview-header message-templates__preview-header--media">
+            <Image size={16} />
+            <strong>Image Header</strong>
+          </div>
+        );
+      case 'document':
+        return (
+          <div className="message-templates__preview-header message-templates__preview-header--media">
+            <File size={16} />
+            <strong>Document Header</strong>
+          </div>
+        );
+      case 'video':
+        return (
+          <div className="message-templates__preview-header message-templates__preview-header--media">
+            <FileVideo size={16} />
+            <strong>Video Header</strong>
+          </div>
+        );
+      default:
+        return null;
+    }
+  };
+
   const renderHeaderContent = (template) => {
     if (!template.header_type) return null;
     
@@ -775,16 +812,10 @@ function MessageTemplates() {
                         {getHeaderTypeIcon(template.header_type)}
                         <span>{getHeaderTypeLabel(template.header_type)}</span>
                       </div>
-                      {/* Debug: Add console log here to see header_type values */}
-                      {console.log('Template header_type:', template.header_type)}
                     </td>
                     <td className="message-templates__table-cell">
                       <div className="message-templates__content-preview">
-                        {template.header_content && (
-                          <div className="message-templates__preview-header">
-                            <strong>{truncateText(template.header_content, 50)}</strong>
-                          </div>
-                        )}
+                        {renderHeaderPreview(template)}
                         {template.body_text && (
                           <div className="message-templates__preview-body">
                             {truncateText(template.body_text, 80)}

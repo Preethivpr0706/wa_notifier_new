@@ -106,7 +106,15 @@ export const contactService = {
         } catch (error) {
             throw error.response?.data || error.message;
         }
-    }
+    },
+    checkListNameAvailability: async (listName) => {
+           try {
+        const response = await apiClient.get(`/contacts/check-list-name?listName=${encodeURIComponent(listName)}`);
+        return response.data;
+          } catch (error) {
+            throw error.response?.data || error.message;
+        }
+    },
 };
 
 export default contactService;
