@@ -1,5 +1,5 @@
+// Enhanced quickRepliesService.js
 import axios from 'axios';
-import { authService } from './authService';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
 
@@ -19,23 +19,11 @@ apiClient.interceptors.request.use((config) => {
   return config;
 });
 
-// Add response interceptor
-apiClient.interceptors.response.use(
-  response => response,
-  error => {
-    if (error.response?.status === 401) {
-      authService.logout();
-    }
-    return Promise.reject(error);
-  }
-);
-
 export const quickRepliesService = {
+  // Get all quick replies for a business
   getQuickReplies: async (businessId) => {
     try {
-      const response = await apiClient.get('/conversation/quick-replies', {
-        params: { businessId }
-      });
+      const response = await apiClient.get(`/quick-replies?businessId=${businessId}`);
       
       if (!response.data.success) {
         throw new Error(response.data.message || 'Failed to fetch quick replies');
@@ -48,12 +36,13 @@ export const quickRepliesService = {
     }
   },
 
+  // Create a new quick reply
   createQuickReply: async (businessId, shortcode, message) => {
     try {
-      const response = await apiClient.post('/conversation/quick-replies', {
-        shortcode,
-        message,
-        businessId
+      const response = await apiClient.post('/quick-replies', {
+        businessId,
+        shortcode: shortcode.toLowerCase().trim(),
+        message: message.trim()
       });
       
       if (!response.data.success) {
@@ -67,9 +56,29 @@ export const quickRepliesService = {
     }
   },
 
+  // Update an existing quick reply
+  updateQuickReply: async (quickReplyId, data) => {
+    try {
+      const response = await apiClient.put(`/quick-replies/${quickReplyId}`, {
+        shortcode: data.shortcode.toLowerCase().trim(),
+        message: data.message.trim()
+      });
+      
+      if (!response.data.success) {
+        throw new Error(response.data.message || 'Failed to update quick reply');
+      }
+      
+      return response.data;
+    } catch (error) {
+      console.error('Error updating quick reply:', error.response?.data);
+      throw error.response?.data || error;
+    }
+  },
+
+  // Delete a quick reply
   deleteQuickReply: async (quickReplyId) => {
     try {
-      const response = await apiClient.delete(`/conversation/quick-replies/${quickReplyId}`);
+      const response = await apiClient.delete(`/quick-replies/${quickReplyId}`);
       
       if (!response.data.success) {
         throw new Error(response.data.message || 'Failed to delete quick reply');
@@ -82,20 +91,18 @@ export const quickRepliesService = {
     }
   },
 
-  updateQuickReply: async (quickReplyId, updates) => {
+  // Search quick replies by shortcode or message content
+  searchQuickReplies: async (businessId, query) => {
     try {
-      const response = await apiClient.put(
-        `/quick-replies/${quickReplyId}`,
-        updates
-      );
+      const response = await apiClient.get(`/quick-replies/search?businessId=${businessId}&q=${encodeURIComponent(query)}`);
       
       if (!response.data.success) {
-        throw new Error(response.data.message || 'Failed to update quick reply');
+        throw new Error(response.data.message || 'Failed to search quick replies');
       }
       
       return response.data;
     } catch (error) {
-      console.error('Error updating quick reply:', error.response?.data);
+      console.error('Error searching quick replies:', error.response?.data);
       throw error.response?.data || error;
     }
   }

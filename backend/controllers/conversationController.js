@@ -559,54 +559,6 @@ class ConversationController {
         }
     }
 
-    static async addQuickReply(businessId, userId, shortcode, message) {
-        const connection = await pool.getConnection();
-        try {
-            const [user] = await connection.execute(
-                `SELECT * FROM users 
-                WHERE id = ? AND business_id = ?`, [userId, businessId]
-            );
-
-            if (!user.length) {
-                throw new Error('Access denied');
-            }
-
-            const quickReplyId = uuidv4();
-            await connection.execute(
-                `INSERT INTO quick_replies 
-                (id, business_id, shortcode, message) 
-                VALUES (?, ?, ?, ?)`, [quickReplyId, businessId, shortcode, message]
-            );
-
-            return quickReplyId;
-        } finally {
-            connection.release();
-        }
-    }
-
-    static async getQuickReplies(businessId, userId) {
-        const connection = await pool.getConnection();
-        try {
-            const [user] = await connection.execute(
-                `SELECT * FROM users 
-                WHERE id = ? AND business_id = ?`, [userId, businessId]
-            );
-
-            if (!user.length) {
-                throw new Error('Access denied');
-            }
-
-            const [quickReplies] = await connection.execute(
-                `SELECT * FROM quick_replies 
-                WHERE business_id = ? 
-                ORDER BY shortcode ASC`, [businessId]
-            );
-
-            return quickReplies;
-        } finally {
-            connection.release();
-        }
-    }
     static async ensureConversationForCampaign(businessId, phoneNumber, contactId = null) {
         const connection = await pool.getConnection();
         try {

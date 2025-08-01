@@ -1,13 +1,71 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Send, Paperclip, Smile, User, MoreVertical, Search, Image, Video, File, X } from 'lucide-react';
+import { ArrowLeft, Send, Paperclip, Smile, User, MoreVertical, Search, Image, Video, File, X,Zap } from 'lucide-react';
 import { conversationService } from '../../api/conversationService';
+import { quickRepliesService } from '../../api/quickRepliesService';
 import { useChatWebSocket } from '../../hooks/useChatWebSocket';
 import { authService } from '../../api/authService';
 import EmojiPicker from './EmojiPicker';
 import MessageSearchModal from './MessageSearchModal';
 import ConversationOptionsModal from './ConversationOptionsModal';
 import './ConversationDetail.css';
+
+// Quick Replies Dropdown Component
+const QuickRepliesDropdown = ({ quickReplies, onSelect, onClose, position }) => {
+  const [filteredReplies, setFilteredReplies] = useState(quickReplies);
+  const [searchTerm, setSearchTerm] = useState('');
+
+  useEffect(() => {
+    if (searchTerm) {
+      const filtered = quickReplies.filter(reply => 
+        reply.shortcode.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        reply.message.toLowerCase().includes(searchTerm.toLowerCase())
+      );
+      setFilteredReplies(filtered);
+    } else {
+      setFilteredReplies(quickReplies);
+    }
+  }, [searchTerm, quickReplies]);
+
+  return (
+    <div className="quick-replies-dropdown" style={{ 
+      bottom: position.bottom, 
+      left: position.left,
+      maxHeight: '200px',
+      overflowY: 'auto'
+    }}>
+      <div className="quick-replies-header">
+        <input
+          type="text"
+          placeholder="Search quick replies..."
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+          className="quick-replies-search"
+          autoFocus
+        />
+        <button onClick={onClose} className="close-dropdown-btn">
+          <X size={16} />
+        </button>
+      </div>
+      <div className="quick-replies-list">
+        {filteredReplies.length === 0 ? (
+          <div className="no-replies">No quick replies found</div>
+        ) : (
+          filteredReplies.map(reply => (
+            <div
+              key={reply.id}
+              className="quick-reply-item"
+              onClick={() => onSelect(reply)}
+            >
+              <div className="reply-shortcode">/{reply.shortcode}</div>
+              <div className="reply-message">{reply.message}</div>
+            </div>
+          ))
+        )}
+      </div>
+    </div>
+  );
+};
 
 // Date separator component
 const DateSeparator = ({ date }) => {
@@ -283,14 +341,32 @@ const ConversationDetail = () => {
   const [showOptionsModal, setShowOptionsModal] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [highlightedMessageId, setHighlightedMessageId] = useState(null);
+
+  // Quick Replies state
+  const [quickReplies, setQuickReplies] = useState([]);
+  const [showQuickReplies, setShowQuickReplies] = useState(false);
+  const [quickRepliesPosition, setQuickRepliesPosition] = useState({ bottom: 0, left: 0 });
+  
   
   const messagesEndRef = useRef(null);
   const typingTimeoutRef = useRef(null);
   const fileInputRef = useRef(null);
   const emojiPickerRef = useRef(null);
+  const quickRepliesRef = useRef(null);
+  const textareaRef = useRef(null);
 
   const user = authService.getCurrentUser();
   const { notifications, sendMessage, isConnected, reconnect, clearNotifications } = useChatWebSocket();
+
+   // Load quick replies
+  const fetchQuickReplies = useCallback(async () => {
+    try {
+      const response = await quickRepliesService.getQuickReplies(user.businessId);
+      setQuickReplies(response.data || []);
+    } catch (error) {
+      console.error('Error loading quick replies:', error);
+    }
+  }, [user.businessId]);
 
   // Helper function to check if two dates are on the same day
   const isSameDay = (date1, date2) => {
@@ -350,11 +426,64 @@ const ConversationDetail = () => {
       setLoading(false);
     }
   }, [id, user.businessId]);
+   // Handle quick reply selection
+  const handleQuickReplySelect = (quickReply) => {
+    setNewMessage(quickReply.message);
+    setShowQuickReplies(false);
+    textareaRef.current?.focus();
+  };
 
-  // Updated handler for conversation updates
+  // Handle slash command detection
+  const handleInputChange = (e) => {
+    const value = e.target.value;
+    setNewMessage(value);
+
+    // Check for slash command
+    const cursorPosition = e.target.selectionStart;
+    const textBeforeCursor = value.substring(0, cursorPosition);
+    const lastSlashIndex = textBeforeCursor.lastIndexOf('/');
+    
+    if (lastSlashIndex !== -1) {
+      const commandText = textBeforeCursor.substring(lastSlashIndex + 1);
+      
+      // Show quick replies if we have a slash at the beginning of a word
+      if (commandText.length >= 0 && (lastSlashIndex === 0 || value[lastSlashIndex - 1] === ' ')) {
+        const rect = e.target.getBoundingClientRect();
+        setQuickRepliesPosition({
+          bottom: window.innerHeight - rect.top + 10,
+          left: rect.left
+        });
+        setShowQuickReplies(true);
+      } else {
+        setShowQuickReplies(false);
+      }
+    } else {
+      setShowQuickReplies(false);
+    }
+  };
+
+  // Process slash commands in message
+  const processSlashCommands = (message) => {
+    let processedMessage = message;
+    
+    // Find all slash commands in the message
+    const slashCommandRegex = /\/(\w+)/g;
+    let match;
+    
+    while ((match = slashCommandRegex.exec(message)) !== null) {
+      const shortcode = match[1];
+      const quickReply = quickReplies.find(qr => qr.shortcode === shortcode);
+      
+      if (quickReply) {
+        processedMessage = processedMessage.replace(match[0], quickReply.message);
+      }
+    }
+    
+    return processedMessage;
+  };
+
   const handleConversationUpdated = useCallback(async () => {
     try {
-      // Refetch conversation data to get the latest status
       const convResponse = await conversationService.getConversation(id);
       setConversation(convResponse.data);
     } catch (error) {
@@ -367,15 +496,16 @@ const ConversationDetail = () => {
 
     try {
       setSending(true);
-      const messageContent = newMessage;
+      const processedMessage = processSlashCommands(newMessage);
       setNewMessage('');
       setShowEmojiPicker(false);
+      setShowQuickReplies(false);
 
       sendMessage({ type: 'typing', conversationId: id, isTyping: false });
 
       await conversationService.sendMessage(id, {
         messageType: 'text',
-        content: messageContent
+        content: processedMessage
       });
 
     } catch (error) {
@@ -410,7 +540,13 @@ const ConversationDetail = () => {
   const handleKeyPress = (e) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
-      handleSendMessage();
+      if (showQuickReplies) {
+        setShowQuickReplies(false);
+      } else {
+        handleSendMessage();
+      }
+    } else if (e.key === 'Escape' && showQuickReplies) {
+      setShowQuickReplies(false);
     }
   };
 
@@ -441,6 +577,17 @@ const ConversationDetail = () => {
     setShowEmojiPicker(false);
   };
 
+  const handleQuickRepliesToggle = () => {
+    if (!showQuickReplies && textareaRef.current) {
+      const rect = textareaRef.current.getBoundingClientRect();
+      setQuickRepliesPosition({
+        bottom: window.innerHeight - rect.top + 10,
+        left: rect.left
+      });
+    }
+    setShowQuickReplies(!showQuickReplies);
+  };
+
   const handleMessageSearch = (messageId) => {
     setHighlightedMessageId(messageId);
     setShowSearchModal(false);
@@ -455,29 +602,33 @@ const ConversationDetail = () => {
     }, 3000);
   };
 
-  // Close emoji picker when clicking outside
+  // Close dropdowns when clicking outside
   useEffect(() => {
     const handleClickOutside = (event) => {
       if (emojiPickerRef.current && !emojiPickerRef.current.contains(event.target)) {
         setShowEmojiPicker(false);
       }
+      if (quickRepliesRef.current && !quickRepliesRef.current.contains(event.target)) {
+        setShowQuickReplies(false);
+      }
     };
 
-    if (showEmojiPicker) {
+    if (showEmojiPicker || showQuickReplies) {
       document.addEventListener('mousedown', handleClickOutside);
     }
 
     return () => {
       document.removeEventListener('mousedown', handleClickOutside);
     };
-  }, [showEmojiPicker]);
+  }, [showEmojiPicker, showQuickReplies]);
 
-  // Initialize conversation
+  // Initialize conversation and quick replies
   useEffect(() => {
     fetchConversation();
-  }, [fetchConversation]);
+    fetchQuickReplies();
+  }, [fetchConversation, fetchQuickReplies]);
 
-  // Handle WebSocket notifications
+  // Handle WebSocket notifications (keeping existing)
   useEffect(() => {
     if (!notifications.length) return;
 
@@ -583,22 +734,19 @@ const ConversationDetail = () => {
                     Reconnect
                   </button>
                 )}
-             
-<span
-  className={`conversation-status ${
-    conversation.status === 'active'
-      ? 'conversation-status--active'
-      : conversation.status === 'closed'
-      ? 'conversation-status--closed'
-      : 'conversation-status--archived'
-  }`}
->
-  {conversation.status === 'active'
-    ? 'Active'
-    : conversation.status === 'closed'
-    ? 'Closed'
-    : 'Archived'}
-</span>
+                <span className={`conversation-status ${
+                  conversation.status === 'active'
+                    ? 'conversation-status--active'
+                    : conversation.status === 'closed'
+                    ? 'conversation-status--closed'
+                    : 'conversation-status--archived'
+                }`}>
+                  {conversation.status === 'active'
+                    ? 'Active'
+                    : conversation.status === 'closed'
+                    ? 'Closed'
+                    : 'Archived'}
+                </span>
                 {isTyping && <span className="typing-indicator">typing...</span>}
               </div>
             </div>
@@ -659,13 +807,32 @@ const ConversationDetail = () => {
               <EmojiPicker onEmojiClick={handleEmojiClick} />
             )}
           </div>
+
+          <div className="quick-replies-container" ref={quickRepliesRef}>
+            <button 
+              className="input-action-btn quick-replies-btn"
+              onClick={handleQuickRepliesToggle}
+              title="Quick Replies (type / to search)"
+            >
+              <Zap size={20} />
+            </button>
+            {showQuickReplies && (
+              <QuickRepliesDropdown
+                quickReplies={quickReplies}
+                onSelect={handleQuickReplySelect}
+                onClose={() => setShowQuickReplies(false)}
+                position={quickRepliesPosition}
+              />
+            )}
+          </div>
           
           <div className="input-wrapper">
             <textarea
+              ref={textareaRef}
               value={newMessage}
-              onChange={(e) => setNewMessage(e.target.value)}
+              onChange={handleInputChange}
               onKeyPress={handleKeyPress}
-              placeholder="Type a message"
+              placeholder="Type a message or use /shortcode for quick replies"
               rows={1}
               className="message-textarea"
               disabled={!isConnected}
