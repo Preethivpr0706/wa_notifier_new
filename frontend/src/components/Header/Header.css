@@ -64,7 +64,8 @@
 .logo {
     width: 36px;
     height: 36px;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    background: transparent;
+    /*background: linear-gradient(135deg, #aeafb2 0%, #dbd8df 100%);*/
     border-radius: var(--border-radius-md);
     display: flex;
     align-items: center;

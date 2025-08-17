@@ -319,9 +319,9 @@ class WhatsAppService {
                 console.log(whatsappTemplate.quality_score);
                 return {
                     status: templateStatus,
-                    whatsappStatus: whatsappTemplate.status,
-                    qualityScore: whatsappTemplate.quality_score,
-                    rejectionReason: whatsappTemplate.rejection_reason
+                    whatsappStatus: whatsappTemplate.status ? whatsappTemplate.status : null,
+                    qualityScore: whatsappTemplate.quality_score ? whatsappTemplate.quality_score : null,
+                    rejectionReason: whatsappTemplate.rejection_reason ? whatsappTemplate.rejection_reason : null
                 };
             }
 

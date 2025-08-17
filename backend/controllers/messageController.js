@@ -977,6 +977,7 @@ class MessageController {
         try {
             const { id } = req.params;
             const userId = req.user.id;
+            const businessId = req.user.businessId;
 
             // Get the draft campaign
             const campaign = await Campaign.getById(id, userId);
@@ -1032,7 +1033,8 @@ class MessageController {
                 contacts,
                 fieldMappings,
                 campaign.template_id,
-                userId
+                userId,
+                businessId
             );
 
             res.json({

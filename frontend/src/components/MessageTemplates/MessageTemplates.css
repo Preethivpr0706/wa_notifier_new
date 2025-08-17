@@ -863,6 +863,8 @@
     z-index: 1000;
     padding: var(--mt-spacing-lg);
     animation: mt-fadeIn 0.2s ease-out;
+    /* Ensure scrolling when content exceeds screen */
+    overflow-y: auto;
 }
 
 .message-templates__modal-content {
@@ -873,6 +875,9 @@
     max-width: 480px;
     box-shadow: var(--mt-shadow-xl);
     animation: mt-slideIn 0.3s ease-out;
+    /* Ensure modal doesn't exceed screen height */
+    max-height: calc(100vh - 2 * var(--mt-spacing-lg));
+    overflow-y: auto;
 }
 
 .message-templates__modal-title {
@@ -931,11 +936,16 @@
 }
 
 
-/* Preview Modal */
+/* Preview Modal - FIXED SIZING */
 
 .message-templates__preview-modal {
-    max-width: 500px;
+    max-width: 420px;
     padding: 0;
+    /* Constrain height to viewport minus overlay padding */
+    max-height: calc(100vh - 2 * var(--mt-spacing-lg));
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
 }
 
 .message-templates__preview-header {
@@ -946,6 +956,7 @@
     align-items: center;
     background-color: var(--mt-neutral-50);
     border-radius: var(--mt-border-radius-lg) var(--mt-border-radius-lg) 0 0;
+    flex-shrink: 0;
 }
 
 .message-templates__preview-title {
@@ -978,23 +989,34 @@
 
 .message-templates__preview-content {
     padding: var(--mt-spacing-lg);
+    overflow-y: auto;
+    flex: 1;
+    min-height: 0;
 }
 
 .message-templates__phone-preview {
     background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    border-radius: 32px;
-    padding: var(--mt-spacing-2xl) var(--mt-spacing-md);
+    border-radius: 24px;
+    padding: var(--mt-spacing-lg) var(--mt-spacing-sm);
     position: relative;
     box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+    /* Remove fixed dimensions, make it responsive */
+    max-width: 300px;
+    margin: 0 auto;
 }
 
 .message-templates__phone-screen {
     background-color: var(--mt-whatsapp-light);
-    height: 600px;
+    /* Make height responsive instead of fixed */
+    height: auto;
+    max-height: 500px;
+    min-height: 400px;
     overflow: hidden;
     position: relative;
     border-radius: var(--mt-border-radius-md);
     box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.1);
+    display: flex;
+    flex-direction: column;
 }
 
 .message-templates__chat-header {
@@ -1005,6 +1027,7 @@
     align-items: center;
     gap: var(--mt-spacing-sm);
     box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    flex-shrink: 0;
 }
 
 .message-templates__chat-avatar {
@@ -1046,8 +1069,10 @@
     display: flex;
     flex-direction: column;
     gap: var(--mt-spacing-md);
-    height: 520px;
+    /* Make messages container flexible height */
+    flex: 1;
     overflow-y: auto;
+    min-height: 200px;
 }
 
 .message-templates__message-container {
@@ -1213,24 +1238,32 @@
 /* Custom Scrollbars */
 
 .message-templates__table-wrapper::-webkit-scrollbar,
-.message-templates__chat-messages::-webkit-scrollbar {
+.message-templates__chat-messages::-webkit-scrollbar,
+.message-templates__modal-content::-webkit-scrollbar,
+.message-templates__preview-content::-webkit-scrollbar {
     width: 6px;
     height: 6px;
 }
 
 .message-templates__table-wrapper::-webkit-scrollbar-track,
-.message-templates__chat-messages::-webkit-scrollbar-track {
+.message-templates__chat-messages::-webkit-scrollbar-track,
+.message-templates__modal-content::-webkit-scrollbar-track,
+.message-templates__preview-content::-webkit-scrollbar-track {
     background: transparent;
 }
 
 .message-templates__table-wrapper::-webkit-scrollbar-thumb,
-.message-templates__chat-messages::-webkit-scrollbar-thumb {
+.message-templates__chat-messages::-webkit-scrollbar-thumb,
+.message-templates__modal-content::-webkit-scrollbar-thumb,
+.message-templates__preview-content::-webkit-scrollbar-thumb {
     background: rgba(0, 0, 0, 0.2);
     border-radius: 3px;
 }
 
 .message-templates__table-wrapper::-webkit-scrollbar-thumb:hover,
-.message-templates__chat-messages::-webkit-scrollbar-thumb:hover {
+.message-templates__chat-messages::-webkit-scrollbar-thumb:hover,
+.message-templates__modal-content::-webkit-scrollbar-thumb:hover,
+.message-templates__preview-content::-webkit-scrollbar-thumb:hover {
     background: rgba(0, 0, 0, 0.3);
 }
 
@@ -1293,14 +1326,21 @@
     .message-templates__modal-overlay {
         padding: var(--mt-spacing-md);
     }
+    /* Mobile modal adjustments */
+    .message-templates__preview-modal {
+        max-width: 100%;
+        max-height: calc(100vh - 2 * var(--mt-spacing-md));
+    }
     .message-templates__phone-preview {
-        padding: var(--mt-spacing-lg) var(--mt-spacing-sm);
+        padding: var(--mt-spacing-md) var(--mt-spacing-xs);
+        max-width: 280px;
     }
     .message-templates__phone-screen {
-        height: 500px;
+        max-height: 400px;
+        min-height: 300px;
     }
     .message-templates__chat-messages {
-        height: 420px;
+        min-height: 150px;
     }
 }
 
@@ -1320,6 +1360,14 @@
     }
     .message-templates__modal-btn {
         width: 100%;
+    }
+    /* Extra small screen adjustments */
+    .message-templates__phone-preview {
+        max-width: 250px;
+    }
+    .message-templates__phone-screen {
+        max-height: 350px;
+        min-height: 250px;
     }
 }
 
