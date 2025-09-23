@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { Search, Archive, MoreVertical, User, MessageCircle, X } from 'lucide-react';
+import { Search, Archive, MoreVertical, User, MessageCircle, X, Menu } from 'lucide-react';
 import { conversationService } from '../../api/conversationService';
 import { useChatWebSocket } from '../../hooks/useChatWebSocket';
 import { authService } from '../../api/authService';
@@ -14,6 +14,7 @@ const ConversationList = () => {
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
   const [statusFilter, setStatusFilter] = useState('all');
+  const [isSearchFocused, setIsSearchFocused] = useState(false);
   
   const user = authService.getCurrentUser();
   const businessId = user?.businessId;
@@ -21,10 +22,10 @@ const ConversationList = () => {
   const { notifications } = useChatWebSocket();
 
   const statusFilters = [
-    { value: 'all', label: 'All Chats', icon: '💬' },
-    { value: 'active', label: 'Active', icon: '🟢' },
-    { value: 'closed', label: 'Closed', icon: '⭕' },
-    { value: 'archived', label: 'Archived', icon: '📋' }
+    { value: 'all', label: 'All', icon: '💬', count: 0 },
+    { value: 'unread', label: 'Unread', icon: '🔴', count: 0 },
+    { value: 'active', label: 'Active', icon: '🟢', count: 0 },
+    { value: 'archived', label: 'Archived', icon: '📁', count: 0 }
   ];
 
   const fetchConversations = async (reset = false) => {
@@ -39,7 +40,6 @@ const ConversationList = () => {
         currentPage
       );
       
-      // Sort by last_message_at in descending order (most recent first)
       const sortedConversations = response.data.sort((a, b) => {
         const dateA = a.last_message_at ? new Date(a.last_message_at) : new Date(0);
         const dateB = b.last_message_at ? new Date(b.last_message_at) : new Date(0);
@@ -112,13 +112,12 @@ const ConversationList = () => {
     return conversation.client_name || `+${conversation.phone_number}`;
   };
 
-  const truncateMessage = (message, maxLength = 35) => {
+  const truncateMessage = (message, maxLength = 30) => {
     if (!message) return 'No messages yet';
     if (message.length <= maxLength) return message;
     return message.substring(0, maxLength) + '...';
   };
 
-  // Enhanced search function to search both name and phone number
   const filteredConversations = conversations.filter(conv => {
     const query = searchQuery.toLowerCase();
     const contactName = getContactName(conv).toLowerCase();
@@ -127,150 +126,176 @@ const ConversationList = () => {
     return contactName.includes(query) || phoneNumber.includes(query);
   });
 
-  // Calculate unread count (don't show for currently active conversation)
   const getDisplayUnreadCount = (conversation) => {
     if (activeConversationId === conversation.id.toString()) {
-      return 0; // Don't show unread count for currently active conversation
+      return 0;
     }
     return conversation.unread_count || 0;
   };
 
   const clearSearch = () => {
     setSearchQuery('');
+    setIsSearchFocused(false);
+  };
+
+  const getInitials = (name) => {
+    if (!name) return 'U';
+    const words = name.split(' ');
+    if (words.length >= 2) {
+      return (words[0][0] + words[1][0]).toUpperCase();
+    }
+    return name.substring(0, 2).toUpperCase();
   };
 
   return (
-    <div className="conversation-list-container">
-      <div className="conversation-list-header">
-        <div className="header-top">
-          <div className="profile-section">
-            <div className="profile-avatar">
-              <User size={22} />
+    <div className="whatsapp-conversation-list">
+      {/* Header */}
+      <div className="wa-header">
+        <div className="wa-header-content">
+          <div className="wa-profile-section">
+            <div className="wa-profile-avatar">
+              <User size={20} />
             </div>
-            <div className="profile-info">
-              <h3 className="profile-name">WhatsApp Business</h3>
-              <p className="profile-status">Live Chat Dashboard</p>
-            </div>
-          </div>
-          <div className="header-actions">
-            <button className="action-btn" title="Archive">
-              <Archive size={18} />
-            </button>
-            <button className="action-btn" title="More options">
-              <MoreVertical size={18} />
-            </button>
-          </div>
-        </div>
-        
-        <div className="search-section">
-          <div className="search-container">
-            <div className="search-input-wrapper">
-              <Search size={18} className="search-icon" />
-              <input
-                type="text"
-                placeholder="Search conversations..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="search-input"
-              />
-              {searchQuery && (
-                <button 
-                  className="search-clear-btn" 
-                  onClick={clearSearch}
-                  title="Clear search"
-                >
-                  <X size={14} />
-                </button>
-              )}
+            <div className="wa-profile-info">
+              <h3>Chats</h3>
             </div>
           </div>
-        </div>
-        
-        <div className="conversation-filters">
-          {statusFilters.map(filter => (
-            <button
-              key={filter.value}
-              className={`filter-btn ${statusFilter === filter.value ? 'filter-btn--active' : ''}`}
-              onClick={() => setStatusFilter(filter.value)}
-            >
-              <span>{filter.icon}</span>
-              {filter.label}
+          <div className="wa-header-actions">
+            <button className="wa-action-btn" title="Archive">
+              <Archive size={20} />
             </button>
-          ))}
+            <button className="wa-action-btn" title="Menu">
+              <MoreVertical size={20} />
+            </button>
+          </div>
         </div>
       </div>
 
-      <div className="conversation-items">
-        {loading && conversations.length === 0 ? (
-          <div className="loading-state">
-            <div className="loading-spinner"></div>
-            <span>Loading conversations...</span>
-          </div>
-        ) : filteredConversations.length === 0 ? (
-          <div className="empty-state">
-            <MessageCircle size={64} />
-            <span>No conversations found</span>
-            <small>Start a new conversation or adjust your filters</small>
-          </div>
-        ) : (
-          <>
-            {filteredConversations.map(conv => {
-              const displayUnreadCount = getDisplayUnreadCount(conv);
-              const isActive = activeConversationId === conv.id.toString();
-              
-              return (
-                <Link
-                  key={conv.id}
-                  to={`/conversations/${conv.id}`}
-                  className={`conversation-item ${displayUnreadCount > 0 ? 'conversation-item--unread' : ''} ${isActive ? 'conversation-item--active' : ''}`}
-                >
-                  <div className="conversation-avatar">
-                    {conv.contact_avatar ? (
-                      <img src={conv.contact_avatar} alt="Profile" className="conversation-avatar__image" />
-                    ) : (
-                      <User size={26} />
-                    )}
-                  </div>
-                  <div className="conversation-details">
-                    <div className="conversation-header">
-                      <span className="contact-name">{getContactName(conv)}</span>
-                      <span className="conversation-time">
-                        {formatTime(conv.last_message_at)}
-                      </span>
-                    </div>
-                    <div className="conversation-preview">
-                      <p className="message-preview">
-                        {truncateMessage(conv.last_message_content)}
-                      </p>
-                      {displayUnreadCount > 0 && (
-                        <div className="unread-badge">{displayUnreadCount}</div>
-                      )}
-                    </div>
-                  </div>
-                </Link>
-              );
-            })}
-            {hasMore && (
+      {/* Search */}
+      <div className="wa-search-container">
+        <div className={`wa-search-wrapper ${isSearchFocused ? 'focused' : ''}`}>
+          <div className="wa-search-input-container">
+            <Search size={16} className="wa-search-icon" />
+            <input
+              type="text"
+              placeholder="Search or start new chat"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              onFocus={() => setIsSearchFocused(true)}
+              onBlur={() => setIsSearchFocused(false)}
+              className="wa-search-input"
+            />
+            {searchQuery && (
               <button 
-                className="load-more-btn"
-                onClick={loadMore}
-                disabled={loading}
+                className="wa-search-clear" 
+                onClick={clearSearch}
+                type="button"
               >
-                {loading ? (
-                  <>
-                    <div className="loading-spinner loading-spinner--small"></div>
-                    <span>Loading more...</span>
-                  </>
-                ) : (
-                  <>
-                    <span>📄</span>
-                    Load More Conversations
-                  </>
-                )}
+                <X size={16} />
               </button>
             )}
-          </>
-        )}
+          </div>
+        </div>
+      </div>
+
+      {/* Filters */}
+      <div className="wa-filters">
+        {statusFilters.map(filter => (
+          <button
+            key={filter.value}
+            className={`wa-filter-btn ${statusFilter === filter.value ? 'active' : ''}`}
+            onClick={() => setStatusFilter(filter.value)}
+          >
+            {filter.label}
+          </button>
+        ))}
+      </div>
+
+      {/* Conversations List */}
+      <div className="wa-conversations">
+        <div className="wa-conversations-scroll">
+          {loading && conversations.length === 0 ? (
+            <div className="wa-loading">
+              <div className="wa-spinner"></div>
+            </div>
+          ) : filteredConversations.length === 0 ? (
+            <div className="wa-empty-state">
+              <MessageCircle size={64} className="wa-empty-icon" />
+              <p>No conversations found</p>
+              <span>Start messaging to see your chats here</span>
+            </div>
+          ) : (
+            <>
+              {filteredConversations.map(conv => {
+                const displayUnreadCount = getDisplayUnreadCount(conv);
+                const isActive = activeConversationId === conv.id.toString();
+                
+                return (
+                  <Link
+                    key={conv.id}
+                    to={`/conversations/${conv.id}`}
+                    className={`wa-conversation-item ${isActive ? 'active' : ''} ${displayUnreadCount > 0 ? 'unread' : ''}`}
+                  >
+                    <div className="wa-avatar">
+                      {conv.contact_avatar ? (
+                        <img 
+                          src={conv.contact_avatar} 
+                          alt={getContactName(conv)}
+                          className="wa-avatar-img"
+                        />
+                      ) : (
+                        <div className="wa-avatar-placeholder">
+                          {getInitials(getContactName(conv))}
+                        </div>
+                      )}
+                    </div>
+                    
+                    <div className="wa-conversation-content">
+                      <div className="wa-conversation-header">
+                        <h4 className="wa-contact-name">
+                          {getContactName(conv)}
+                        </h4>
+                        <span className="wa-time">
+                          {formatTime(conv.last_message_at)}
+                        </span>
+                      </div>
+                      
+                      <div className="wa-conversation-preview">
+                        <p className="wa-last-message">
+                          {truncateMessage(conv.last_message_content)}
+                        </p>
+                        {displayUnreadCount > 0 && (
+                          <div className="wa-unread-count">
+                            {displayUnreadCount > 99 ? '99+' : displayUnreadCount}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </Link>
+                );
+              })}
+              
+              {hasMore && (
+                <div className="wa-load-more">
+                  <button 
+                    className="wa-load-more-btn"
+                    onClick={loadMore}
+                    disabled={loading}
+                  >
+                    {loading ? (
+                      <>
+                        <div className="wa-spinner wa-spinner-small"></div>
+                        Loading...
+                      </>
+                    ) : (
+                      'Load more chats'
+                    )}
+                  </button>
+                </div>
+              )}
+            </>
+          )}
+        </div>
       </div>
     </div>
   );

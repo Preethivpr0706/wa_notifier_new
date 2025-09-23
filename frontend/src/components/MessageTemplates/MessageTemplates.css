@@ -4,27 +4,50 @@
 /* CSS Variables */
 
 .message-templates {
-    --mt-primary-color: #1a73e8;
-    --mt-primary-hover: #1557b0;
-    --mt-secondary-color: #f8f9fa;
-    --mt-accent-color: #4285f4;
-    --mt-success-color: #25d366;
-    --mt-warning-color: #fbbc05;
-    --mt-error-color: #ea4335;
-    --mt-neutral-50: #fafafa;
-    --mt-neutral-100: #f5f5f5;
-    --mt-neutral-200: #e5e5e5;
-    --mt-neutral-300: #d4d4d4;
-    --mt-neutral-400: #a3a3a3;
-    --mt-neutral-500: #737373;
-    --mt-neutral-600: #525252;
-    --mt-neutral-700: #404040;
-    --mt-neutral-800: #262626;
-    --mt-neutral-900: #171717;
+    /* ✅ WhatsApp-themed Palette */
+    /* Primary Colors */
+    --wa-green: #25d366;
+    --wa-green-dark: #128c7e;
+    --wa-blue: #0ea5e9;
+    /* Status Colors */
+    --wa-success: #10b981;
+    --wa-warning: #f59e0b;
+    --wa-danger: #ef4444;
+    /* Neutral Grays */
+    --wa-gray-50: #f9fafb;
+    --wa-gray-100: #f3f4f6;
+    --wa-gray-200: #e5e7eb;
+    --wa-gray-300: #d1d5db;
+    --wa-gray-400: #9ca3af;
+    --wa-gray-500: #6b7280;
+    --wa-gray-600: #4b5563;
+    --wa-gray-700: #374151;
+    --wa-gray-800: #1f2937;
+    /* ✅ Map Existing mt-* system to WA palette */
+    --mt-primary-color: var(--wa-green);
+    --mt-primary-hover: var(--wa-green-dark);
+    --mt-secondary-color: var(--wa-gray-50);
+    --mt-accent-color: var(--wa-blue);
+    --mt-success-color: var(--wa-success);
+    --mt-warning-color: var(--wa-warning);
+    --mt-error-color: var(--wa-danger);
+    --mt-neutral-50: var(--wa-gray-50);
+    --mt-neutral-100: var(--wa-gray-100);
+    --mt-neutral-200: var(--wa-gray-200);
+    --mt-neutral-300: var(--wa-gray-300);
+    --mt-neutral-400: var(--wa-gray-400);
+    --mt-neutral-500: var(--wa-gray-500);
+    --mt-neutral-600: var(--wa-gray-600);
+    --mt-neutral-700: var(--wa-gray-700);
+    --mt-neutral-800: var(--wa-gray-800);
+    --mt-neutral-900: #111827;
+    /* extended dark gray */
     --mt-white: #ffffff;
-    --mt-whatsapp-green: #25d366;
+    /* WhatsApp accents */
+    --mt-whatsapp-green: var(--wa-green);
     --mt-whatsapp-light: #e8f5e8;
-    --mt-whatsapp-dark: #075e54;
+    --mt-whatsapp-dark: var(--wa-green-dark);
+    /* Other Variables (Spacing, Radius, Shadow, etc.) */
     --mt-border-radius-sm: 6px;
     --mt-border-radius-md: 12px;
     --mt-border-radius-lg: 16px;

@@ -5,40 +5,25 @@ import './ChatLayout.css';
 
 const ChatLayout = () => {
   const { id } = useParams();
-  const [isMobile, setIsMobile] = useState(window.innerWidth <= 480);
-  const [isTablet, setIsTablet] = useState(window.innerWidth > 480 && window.innerWidth <= 768);
+  const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
   
   useEffect(() => {
     const handleResize = () => {
       const width = window.innerWidth;
-      const height = window.innerHeight;
-      const isLandscape = width > height;
-      
-      setIsMobile(width <= 480 && !isLandscape);
-      setIsTablet(width > 480 && width <= 768);
+      setIsMobile(width <= 768);
     };
     
     window.addEventListener('resize', handleResize);
-    handleResize(); // Call once on mount
+    handleResize();
     
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
-  // For mobile: show list when no conversation is selected, show detail when conversation is selected
-  // For tablet and desktop: always show both sections
   const showList = !isMobile || !id;
   const showDetail = !isMobile || !!id;
 
-  // Determine container classes
-  const containerClasses = ['chat-layout-container'];
-  if (isMobile && !id) {
-    containerClasses.push('show-list');
-  } else if (isMobile && id) {
-    containerClasses.push('show-detail');
-  }
-
   return (
-    <div className={containerClasses.join(' ')}>
+    <div className="chat-layout-container">
       {showList && (
         <div className="conversation-list-section">
           <ConversationList />
@@ -50,19 +35,26 @@ const ChatLayout = () => {
             <div className="empty-chat-state">
               <div className="empty-chat-content">
                 <div className="whatsapp-logo">
-                  <svg viewBox="0 0 303 303" width="120" height="120">
-                    <defs>
-                      <linearGradient id="whatsappGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-                        <stop offset="0%" style={{stopColor: '#09f382', stopOpacity: 1}} />
-                        <stop offset="100%" style={{stopColor: '#25d366', stopOpacity: 1}} />
-                      </linearGradient>
-                    </defs>
-                    <path fill="url(#whatsappGradient)" d="M152.5,0C68.4,0,0,68.4,0,152.5S68.4,305,152.5,305S305,236.6,305,152.5S236.6,0,152.5,0z M152.5,279.3c-22.7,0-44.9-6.1-64.5-17.6l-4.6-2.7l-47.6,12.5l12.8-46.7l-3-4.8C33.6,200.4,27,177,27,152.5 C27,83.4,83.4,27,152.5,27S278,83.4,278,152.5S221.6,279.3,152.5,279.3z"/>
-                    <path fill="#09f382" d="M213.8,170.6c-3.3-1.7-19.5-9.6-22.5-10.7c-3-1.1-5.2-1.7-7.4,1.7c-2.2,3.3-8.5,10.7-10.4,12.9 c-1.9,2.2-3.7,2.5-6.9,0.8c-3.3-1.7-13.8-5.1-26.3-16.2c-9.7-8.7-16.3-19.4-18.2-22.8c-1.9-3.3-0.2-5.1,1.4-6.7 c1.5-1.4,3.3-3.7,4.9-5.5c1.7-1.9,2.2-3.3,3.3-5.5c1.1-2.2,0.6-4.1-0.3-5.7c-0.8-1.7-7.4-17.8-10.1-24.4 c-2.7-6.4-5.4-5.5-7.4-5.6c-1.9-0.1-4.1-0.1-6.3-0.1c-2.2,0-5.7,0.8-8.7,4.1c-3,3.3-11.4,11.1-11.4,27.1s11.7,31.4,13.3,33.6 c1.7,2.2,23.5,35.9,56.9,50.4c7.9,3.4,14.1,5.4,18.9,6.9c7.9,2.5,15.1,2.2,20.8,1.3c6.4-1,19.5-8,22.2-15.7 c2.7-7.7,2.7-14.3,1.9-15.7C219.7,173.4,217.1,172.3,213.8,170.6z"/>
+                  <svg viewBox="0 0 24 24" width="80" height="80">
+                    <path fill="#25D366" d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893A11.821 11.821 0 0020.465 3.516"/>
                   </svg>
                 </div>
-                <h2>WhatsApp LiveChat</h2>
-                <p>Send and receive messages without keeping your phone online.</p>
+                <h2>WhatsApp Business</h2>
+                <p>Select a conversation to start messaging</p>
+                <div className="empty-features">
+                  <div className="feature-item">
+                    <span className="feature-icon">💬</span>
+                    <span>Send and receive messages</span>
+                  </div>
+                  <div className="feature-item">
+                    <span className="feature-icon">📁</span>
+                    <span>Share files and media</span>
+                  </div>
+                  <div className="feature-item">
+                    <span className="feature-icon">⚡</span>
+                    <span>Quick replies and templates</span>
+                  </div>
+                </div>
               </div>
             </div>
           ) : (

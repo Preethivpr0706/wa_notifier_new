@@ -1,109 +1,119 @@
-  import { useState } from 'react';
- import { Link, useLocation, useNavigate } from 'react-router-dom'; 
+import { useState } from 'react';
+import { Link, useLocation, useNavigate } from 'react-router-dom'; 
 import { authService } from '../../api/authService'; 
   
-  import { 
-    LayoutDashboard, 
-    FileText, 
-    Send, 
-    MessageSquare, 
-    Settings, 
-    LogOut, 
-    Menu, 
-    X,
-    Users,
-    PlusCircle,
-    List,
-    Reply
-  } from 'lucide-react';
-  import './Sidebar.css';
+import { 
+  LayoutDashboard, 
+  FileText, 
+  Send, 
+  MessageSquare, 
+  Settings, 
+  LogOut, 
+  Menu, 
+  X,
+  Users,
+  PlusCircle,
+  List,
+  Reply,
+  ChevronDown,
+  ChevronRight
+} from 'lucide-react';
+import './Sidebar.css';
 
-  function Sidebar({ isOpen, toggleSidebar }) {
-    const location = useLocation();
-    const navigate=useNavigate();
-    const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
-    const [contactsOpen, setContactsOpen] = useState(false);
-    const [isLoading, setIsLoading] = useState(false); // Add loading state
+function Sidebar({ isOpen, toggleSidebar }) {
+  const location = useLocation();
+  const navigate = useNavigate();
+  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
+  const [contactsOpen, setContactsOpen] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
 
-    const menuItems = [
-      { 
-        title: 'Dashboard',
-        path: '/',
-        icon: <LayoutDashboard size={20} />
-      },
-      { 
-        title: 'Message Templates',
-        path: '/templates',
-        icon: <FileText size={20} />
-      },
-      { 
-        title: 'Campaigns',
-        path: '/campaigns',
-        icon: <MessageSquare size={20} />
-      },
-      { 
-        title: 'Send Message',
-        path: '/send-message',
-        icon: <Send size={20} />
-      },
-      { 
-        title: 'Settings',
-        path: '/settings',
-        icon: <Settings size={20} />
-      },
-      { 
-    title: 'Live Chat',
-    path: '/conversations',
-    icon: <MessageSquare size={20} />
-  },
-    {
-        title: 'Quick Replies',
-        path: '/quick-replies',
-        icon: <Reply size={20} />
+  const menuItems = [
+    { 
+      title: 'Dashboard',
+      path: '/',
+      icon: <LayoutDashboard size={20} />
     },
-    ];
+    { 
+      title: 'Message Templates',
+      path: '/templates',
+      icon: <FileText size={20} />
+    },
+    { 
+      title: 'Campaigns',
+      path: '/campaigns',
+      icon: <MessageSquare size={20} />
+    },
+    { 
+      title: 'Send Message',
+      path: '/send-message',
+      icon: <Send size={20} />
+    },
+    { 
+      title: 'Live Chat',
+      path: '/conversations',
+      icon: <MessageSquare size={20} />
+    },
+    {
+      title: 'Quick Replies',
+      path: '/quick-replies',
+      icon: <Reply size={20} />
+    },
+    { 
+      title: 'Settings',
+      path: '/settings',
+      icon: <Settings size={20} />
+    }
+  ];
 
-    const handleLogout = () => {
-        setShowLogoutConfirm(true);
-    };
+  const handleLogout = () => {
+    setShowLogoutConfirm(true);
+  };
 
-    const confirmLogout = async () => {
-        try {
-            setIsLoading(true);
-            // Wait for logout to complete
-            await authService.logout();
-            setShowLogoutConfirm(false);
-            // Navigate to login page after logout is complete
-            navigate('/login', { replace: true }); // Use replace to prevent going back
-        } catch (error) {
-            console.error('Logout error:', error);
-            // Optionally show error message
-        } finally {
-            setIsLoading(false);
-        }
-    };
+  const confirmLogout = async () => {
+    try {
+      setIsLoading(true);
+      await authService.logout();
+      setShowLogoutConfirm(false);
+      navigate('/login', { replace: true });
+    } catch (error) {
+      console.error('Logout error:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
-    const cancelLogout = () => {
-        setShowLogoutConfirm(false);
-    };
+  const cancelLogout = () => {
+    setShowLogoutConfirm(false);
+  };
 
-    const toggleContacts = () => {
-      setContactsOpen(!contactsOpen);
-    };
+  const toggleContacts = () => {
+    setContactsOpen(!contactsOpen);
+  };
 
-    return (
+  return (
+    <>
+      {/* Mobile overlay */}
+      {isOpen && (
+        <div className="sidebar-overlay" onClick={toggleSidebar}></div>
+      )}
+      
       <div className={`sidebar ${isOpen ? 'open' : 'closed'}`}>
         <div className="sidebar-header">
           <div className="logo-container">
-            <img src="/src/assets/images/whatsapp-logo.svg" alt="WhatsApp Logo" className="logo" />
-            <span className="logo-text">WA Dashboard</span>
+            <div className="logo-wrapper">
+              <MessageSquare size={28} className="logo-icon" />
+              <div className="logo-pulse"></div>
+            </div>
+            <div className="brand-info">
+              <span className="logo-text">AskMeister</span>
+              <span className="logo-subtitle">WhatsApp Marketing</span>
+            </div>
           </div>
-         {isOpen && (
-  <button className="toggle-button" onClick={toggleSidebar}>
-    <X size={20} />
-  </button>
-)}
-
+          {isOpen && (
+            <button className="toggle-button" onClick={toggleSidebar}>
+              <X size={20} />
+            </button>
+          )}
         </div>
 
         <nav className="sidebar-nav">
@@ -116,17 +126,23 @@ import { authService } from '../../api/authService';
                 >
                   <span className="menu-icon">{item.icon}</span>
                   <span className="menu-text">{item.title}</span>
+                  {location.pathname === item.path && (
+                    <div className="active-indicator"></div>
+                  )}
                 </Link>
               </li>
             ))}
 
             {/* Contacts Dropdown */}
-            <li className={`menu-item ${contactsOpen ? 'open' : ''}`}>
-              <div className="menu-link dropdown-toggle" onClick={toggleContacts}>
+            <li className={`menu-item dropdown-item ${contactsOpen ? 'expanded' : ''}`}>
+              <div className={`menu-link dropdown-toggle ${contactsOpen ? 'open' : ''}`} onClick={toggleContacts}>
                 <span className="menu-icon"><Users size={20} /></span>
                 <span className="menu-text">Contacts</span>
+                <span className="dropdown-arrow">
+                  {contactsOpen ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+                </span>
               </div>
-              {contactsOpen && (
+              <div className={`submenu-container ${contactsOpen ? 'open' : ''}`}>
                 <ul className="submenu-list">
                   <li className="submenu-item">
                     <Link
@@ -137,24 +153,31 @@ import { authService } from '../../api/authService';
                       <span className="submenu-text">Contact List</span>
                     </Link>
                   </li>
-                 
                   <li className="submenu-item">
-    <Link
-      to="/contacts/import"
-      className={`submenu-link ${location.pathname === '/contacts/import' ? 'active' : ''}`}
-    >
-      <PlusCircle size={16} />
-      <span className="submenu-text">Import Contacts</span>
-    </Link>
-  </li>
-
+                    <Link
+                      to="/contacts/import"
+                      className={`submenu-link ${location.pathname === '/contacts/import' ? 'active' : ''}`}
+                    >
+                      <PlusCircle size={16} />
+                      <span className="submenu-text">Import Contacts</span>
+                    </Link>
+                  </li>
                 </ul>
-              )}
+              </div>
             </li>
           </ul>
         </nav>
 
         <div className="sidebar-footer">
+          <div className="user-profile">
+            <div className="user-avatar">
+              <Users size={20} />
+            </div>
+            <div className="user-info">
+              <span className="user-name">Admin User</span>
+              <span className="user-status">Online</span>
+            </div>
+          </div>
           <button className="logout-button" onClick={handleLogout}>
             <span className="menu-icon"><LogOut size={20} /></span>
             <span className="menu-text">Logout</span>
@@ -162,31 +185,44 @@ import { authService } from '../../api/authService';
         </div>
 
         {showLogoutConfirm && (
-          <div className="logout-confirm">
-            <div className="logout-confirm-content">
-              <h3>Confirm Logout</h3>
-              <p>Are you sure you want to log out?</p>
-              <div className="logout-actions">
+          <div className="logout-modal-overlay">
+            <div className="logout-modal">
+              <div className="logout-modal-header">
+                <div className="logout-icon">
+                  <LogOut size={24} />
+                </div>
+                <h3>Confirm Logout</h3>
+                <p>Are you sure you want to log out of AskMeister?</p>
+              </div>
+              <div className="logout-modal-actions">
                 <button 
-                    className="btn btn-secondary" 
-                    onClick={cancelLogout}
-                    disabled={isLoading}
+                  className="btn btn-secondary" 
+                  onClick={cancelLogout}
+                  disabled={isLoading}
                 >
-                    Cancel
+                  Cancel
                 </button>
                 <button 
-                    className="btn btn-primary" 
-                    onClick={confirmLogout}
-                    disabled={isLoading}
+                  className="btn btn-danger" 
+                  onClick={confirmLogout}
+                  disabled={isLoading}
                 >
-                    {isLoading ? 'Logging out...' : 'Logout'}
+                  {isLoading ? (
+                    <>
+                      <div className="spinner"></div>
+                      Logging out...
+                    </>
+                  ) : (
+                    'Logout'
+                  )}
                 </button>
               </div>
             </div>
           </div>
         )}
       </div>
-    );
-  }
+    </>
+  );
+}
 
-  export default Sidebar;
+export default Sidebar;

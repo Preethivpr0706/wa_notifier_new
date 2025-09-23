@@ -704,7 +704,7 @@ const TemplateForm = forwardRef(({ initialData, onSubmit, isSubmitting, business
             return parts.length ? parts : text;
         };
 
-        const currentTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        // const currentTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
         return (
             <div className="template-preview">
@@ -817,12 +817,12 @@ const TemplateForm = forwardRef(({ initialData, onSubmit, isSubmitting, business
                                     )}
                                     
                                     {/* Message Time with Check marks */}
-                                    <div className="wa-template-time">
+                                    {/* <div className="wa-template-time">
                                         {currentTime}
                                         <svg viewBox="0 0 16 15" width="14" height="14">
                                             <path d="M15.01 3.316l-.478-.372a.365.365 0 0 0-.51.063L8.666 9.879a.32.32 0 0 1-.484.033l-.358-.325a.319.319 0 0 0-.484.032l-.378.483a.418.418 0 0 0 .036.541l1.32 1.266c.143.14.361.125.484-.033l6.272-8.048a.366.366 0 0 0-.064-.512zm-4.1 0l-.478-.372a.365.365 0 0 0-.51.063L4.566 9.879a.32.32 0 0 1-.484.033L1.891 7.769a.366.366 0 0 0-.515.006l-.423.433a.364.364 0 0 0 .006.514l3.258 3.185c.143.14.361.125.484-.033l6.272-8.048a.365.365 0 0 0-.063-.51z" />
                                         </svg>
-                                    </div>
+                                    </div> */}
                                 </div>
                             </div>
                         </div>
