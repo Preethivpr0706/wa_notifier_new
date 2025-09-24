@@ -26,11 +26,29 @@ require('dotenv').config();
 const app = express();
 console.log('Environment:', process.env.NODE_ENV);
 // Middleware
+// app.use(cors({
+//     origin: process.env.NODE_ENV === 'production' ?
+//         process.env.FRONTEND_URL : ['http://localhost:3000', 'http://localhost:5173', 'https://wa-notifier-new-frontend.vercel.app'],
+//     credentials: true
+// }));
+const allowedOrigins = [
+    process.env.FRONTEND_URL, // production frontend
+    'http://localhost:3000',
+    'http://localhost:5173',
+    'https://wa-notifier-new-frontend.vercel.app' // staging/test
+];
+
 app.use(cors({
-    origin: process.env.NODE_ENV === 'production' ?
-        process.env.FRONTEND_URL : ['http://localhost:3000', 'http://localhost:5173', 'https://wa-notifier-new-frontend.vercel.app'],
+    origin: (origin, callback) => {
+        if (!origin || allowedOrigins.includes(origin)) {
+            callback(null, true);
+        } else {
+            callback(new Error('Not allowed by CORS'));
+        }
+    },
     credentials: true
 }));
+
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
