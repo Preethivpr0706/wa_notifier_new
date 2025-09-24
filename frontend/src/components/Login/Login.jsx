@@ -72,14 +72,14 @@ function Login() {
                     <div className="login-brand-content">
                         <div className="login-logo-container">
                             <img 
-                                src="/src/assets/images/askmeister.jpg" 
+                                src="/images/askmeister.jpg" 
                                 alt="Company Logo" 
                                 className="login-logo-image"
                             />
                         </div>
                         <div className="login-brand-name-container">
                             <img 
-                                src="/src/assets/images/brand-name.jpg" 
+                                src="/images/brand-name.jpg" 
                                 alt="Brand Name" 
                                 className="login-brand-name-image"
                             />

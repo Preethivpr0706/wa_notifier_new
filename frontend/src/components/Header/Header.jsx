@@ -65,7 +65,7 @@ function Header({ toggleSidebar }) {
           <div className="logo-container">
             <div className="logo">
               <img 
-                src="src/assets/images/askmeister.jpg" 
+                src="/images/askmeister.jpg" 
                 alt="AskMeister Logo" 
                 className="logo-image"
                 onError={(e) => {
