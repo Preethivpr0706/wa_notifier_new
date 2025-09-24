@@ -1,8 +1,8 @@
 // src/api/authService.js
 import axios from 'axios';
 
-const API_URL = import.meta.env.REACT_APP_API_URL || 'http://localhost:5000/api';
-
+//const API_URL = import.meta.env.REACT_APP_API_URL || 'http://localhost:5000/api';
+const API_URL = import.meta.env.REACT_APP_API_URL || 'https://wa-notifier-new.vercel.app/api';
 const apiClient = axios.create({
     baseURL: API_URL,
     headers: {
