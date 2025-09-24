@@ -24,7 +24,7 @@ const quickReplyRoutes = require('./routes/quickReplyRoutes');
 require('dotenv').config();
 
 const app = express();
-
+console.log('Environment:', process.env.NODE_ENV);
 // Middleware
 app.use(cors({
     origin: process.env.NODE_ENV === 'production' ?
