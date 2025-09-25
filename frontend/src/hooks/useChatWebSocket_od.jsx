@@ -65,9 +65,11 @@ export const useChatWebSocket = () => {
       wsRef.current.close();
     }
 
-    // FIXED: Create WebSocket URL pointing to your backend
-    const backendUrl = 'wa-notifier-new.vercel.app'; // Your backend domain
-    const wsUrl = `wss://${backendUrl}/ws?businessId=${businessId}&token=${token}`;
+    // Create WebSocket URL
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const host = window.location.hostname;
+    const port = process.env.NODE_ENV === 'production' ? window.location.port : '5000';
+    const wsUrl = `${protocol}//${host}:${port}/ws?businessId=${businessId}&token=${token}`;
     
     console.log('Connecting to WebSocket:', wsUrl);
     
